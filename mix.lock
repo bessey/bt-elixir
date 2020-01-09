@@ -1,0 +1,6 @@
+%{
+  "bencode": {:hex, :bencode, "0.3.2", "1dece23710b54ef984852aa6abffac982e033eaaee8d57b6a6894ee8ddbd0c84", [:mix], [{:eqc_ex, "~> 1.2.4", [hex: :eqc_ex, repo: "hexpm", optional: false]}], "hexpm"},
+  "bento": {:hex, :bento, "0.9.2", "7c12c68a34c5e63ff9e71506dcedcd2f983055ac1c40edcd86750ead09e2a174", [:mix], [{:poison, "~> 2.0", [hex: :poison, repo: "hexpm", optional: false]}], "hexpm"},
+  "eqc_ex": {:hex, :eqc_ex, "1.2.4", "c169c4025e6f59d95977b1d5f3846cd964e996449755d7e9bf6ac6d3a4520839", [:mix], [], "hexpm"},
+  "poison": {:hex, :poison, "2.2.0", "4763b69a8a77bd77d26f477d196428b741261a761257ff1cf92753a0d4d24a63", [:mix], [], "hexpm"},
+}
