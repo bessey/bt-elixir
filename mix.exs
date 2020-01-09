@@ -21,7 +21,9 @@ defmodule Bittorrent.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:bento, "~> 0.9"}
+      {:bento, "~> 0.9"},
+      {:castore, "~> 0.1.0"},
+      {:httpoison, "~> 1.6"}
     ]
   end
 end
