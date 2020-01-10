@@ -1,14 +1,26 @@
-defmodule Bittorrent.Peer do
+defmodule Bittorrent.PeerCommunication do
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
 
+  defmodule Peer do
+    defstruct [:name, :reserved, :info_hash, :peer_id]
+  end
+
   def connect_to_peer({ip, port}, info_hash, peer_id) do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
-    {:ok, socket} = :gen_tcp.connect(ip, port, [:binary, packet: 0])
-    handshake = handshake_message(info_hash, peer_id)
-    IO.puts("Handshake: #{to_string(handshake)}")
-    :ok = :gen_tcp.send(socket, handshake)
-    receive_handshake(socket)
+
+    case :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000) do
+      {:error, :econnrefused} ->
+        IO.puts("Conn: Refused")
+
+      {:error, :timeout} ->
+        IO.puts("Conn: Timeout")
+
+      {:ok, socket} ->
+        handshake = handshake_message(info_hash, peer_id)
+        :ok = :gen_tcp.send(socket, handshake)
+        receive_handshake(socket)
+    end
   end
 
   def receive_loop(socket) do
@@ -72,22 +84,26 @@ defmodule Bittorrent.Peer do
   end
 
   defp receive_handshake(socket) do
-    base_length = 49
-    {:ok, <<pstr_length::unsigned-integer-size(8)>>} = :gen_tcp.recv(socket, 1)
+    case :gen_tcp.recv(socket, 1) do
+      {:error, :closed} ->
+        IO.puts("Conn: Closed")
 
-    pstr_length_bytes = 8 * pstr_length
+      {:ok, <<pstr_length::unsigned-integer-size(8)>>} ->
+        pstr_length_bytes = 8 * pstr_length
+        base_length = 48
 
-    {
-      :ok,
-      <<
-        pstr::size(pstr_length_bytes),
-        reserved::unsigned-integer-size(64),
-        info_hash::size(160),
-        peer_id::size(160)
-      >>
-    } = :gen_tcp.recv(socket, base_length + pstr_length)
+        {
+          :ok,
+          <<
+            pstr::size(pstr_length_bytes),
+            reserved::unsigned-integer-size(64),
+            info_hash::size(160),
+            peer_id::size(160)
+          >>
+        } = :gen_tcp.recv(socket, base_length + pstr_length)
 
-    IO.puts("pstr: #{pstr}, reserved: #{reserved}, info_hash: #{info_hash}, peer_id: #{peer_id}")
+        %Peer{name: pstr, reserved: reserved, info_hash: info_hash, peer_id: peer_id}
+    end
   end
 
   # handshake: <pstrlen><pstr><reserved><info_hash><peer_id>
@@ -99,11 +115,11 @@ defmodule Bittorrent.Peer do
   # peer_id: 20-byte string used as a unique ID for the client. This is usually the same peer_id that is transmitted in tracker requests (but not always e.g. an anonymity option in Azureus).
   defp handshake_message(info_hash, peer_id) do
     <<
-      @pstrlen::unsigned-integer-size(8),
+      @pstrlen,
       @pstr,
       0::unsigned-integer-size(64),
-      info_hash,
-      peer_id
+      info_hash::binary,
+      peer_id::binary
     >>
   end
 end

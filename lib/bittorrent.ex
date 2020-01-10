@@ -55,7 +55,11 @@ defmodule Bittorrent do
 
     # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
 
-    Peer.connect_to_peer(List.first(peers), info_sha, pid)
+    Enum.slice(peers, 0..3)
+    |> Enum.map(fn peer ->
+      Task.async(fn -> PeerCommunication.connect_to_peer(peer, info_sha, pid) end)
+    end)
+    |> Enum.map(&Task.await/1)
 
     nil
   end
