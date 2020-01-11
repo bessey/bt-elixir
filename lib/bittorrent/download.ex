@@ -12,8 +12,8 @@ defmodule Bittorrent.Downloader do
     GenServer.call(:downloader, {:request_block, peer_pieces})
   end
 
-  def block_downloaded(block) do
-    GenServer.cast(:downloader, {:block_downloaded, block})
+  def block_downloaded(index, block) do
+    GenServer.cast(:downloader, {:block_downloaded, index, block})
   end
 
   # Server (callbacks)

@@ -3,6 +3,16 @@ defmodule Bittorrent.PeerCommunication do
   @pstrlen String.length(@pstr)
   alias Bittorrent.{Peer, Torrent}
 
+  @msg_choke 0
+  @msg_unchoke 1
+  @msg_interested 2
+  @msg_not_interested 3
+  @msg_have 4
+  @msg_bitfield 5
+  @msg_request 6
+  @msg_piece 7
+  @msg_cancel 8
+
   def connect_to_peer({ip, port}, torrent_info, peer_id) do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
 
@@ -26,16 +36,24 @@ defmodule Bittorrent.PeerCommunication do
       {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
         peer = receive_message(peer, torrent_info, msg_length, socket)
         # IO.inspect(peer)
-        send_loop(peer, socket)
+        peer = send_loop(peer, socket)
         receive_loop(peer, torrent_info, socket)
     end
   end
 
-  def send_loop(peer, socket) do
+  def send_loop(%Peer{choked: false, choking: false} = peer, socket) do
     if request = Bittorrent.Downloader.request_block(peer.pieces) do
-      :ok = send_request(peer, socket, request)
+      unless peer.interested_in do
+        send_interested(peer, socket)
+      end
+
+      send_request(peer, socket, request)
+    else
+      send_not_interested(peer, socket)
     end
   end
+
+  def send_loop(peer, _socket), do: peer
 
   # Receive Protocols
 
@@ -49,58 +67,74 @@ defmodule Bittorrent.PeerCommunication do
     process_message(peer, torrent_info, id, length, socket)
   end
 
-  defp process_message(peer, _torrent_info, 0, 1, _socket) do
+  defp process_message(peer, _torrent_info, @msg_choke, 1, _socket) do
     puts(peer, "Msg: choke")
-    peer
+    %Peer{peer | choked: true}
   end
 
-  defp process_message(peer, _torrent_info, 1, 1, _socket) do
+  defp process_message(peer, _torrent_info, @msg_unchoke, 1, _socket) do
     puts(peer, "Msg: unchoke")
-    peer
+    %Peer{peer | choked: false}
   end
 
-  defp process_message(peer, _torrent_info, 2, 1, _socket) do
+  defp process_message(peer, _torrent_info, @msg_interested, 1, _socket) do
     puts(peer, "Msg: interested")
-    peer
+    %Peer{peer | interested: true}
   end
 
-  defp process_message(peer, _torrent_info, 3, 1, _socket) do
+  defp process_message(peer, _torrent_info, @msg_not_interested, 1, _socket) do
     puts(peer, "Msg: not interested")
-    peer
+    %Peer{peer | interested: false}
   end
 
-  defp process_message(peer, _torrent_info, 4, 5, _socket) do
-    puts(peer, "Msg: have")
-    peer
+  defp process_message(peer, _torrent_info, @msg_have, 5 = length, socket) do
+    case :gen_tcp.recv(socket, length - 1) do
+      {:ok, <<piece::unsigned-integer-size(32)>>} ->
+        puts(peer, "Msg: have #{piece}")
+        Peer.have_piece(peer, piece)
+    end
   end
 
-  defp process_message(peer, _torrent_info, 5, length, socket) do
+  defp process_message(peer, _torrent_info, @msg_bitfield, length, socket) do
     puts(peer, "Msg: bitfield #{length}")
-    length_rem = length - 1
 
-    case :gen_tcp.recv(socket, length_rem) do
+    case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
         %Peer{peer | pieces: Torrent.bitfield_pieces(bitfield)}
     end
   end
 
-  defp process_message(peer, _torrent_info, 6, 13, _socket) do
+  defp process_message(peer, _torrent_info, @msg_request, 13, _socket) do
     puts(peer, "Msg: request")
     peer
   end
 
-  defp process_message(peer, _torrent_info, 7, _length, _socket) do
-    puts(peer, "Msg: piece")
+  defp process_message(peer, _torrent_info, @msg_piece, length, socket) do
+    block_length = (length - 9) * 8
+
+    case :gen_tcp.recv(socket, length - 1) do
+      {:ok,
+       <<
+         index::unsigned-integer-size(32),
+         _begin::unsigned-integer-size(32),
+         block::unsigned-integer-size(block_length)
+       >>} ->
+        puts(peer, "Msg: piece #{index}")
+        Bittorrent.Downloader.block_downloaded(index, block)
+        peer
+    end
+
     peer
   end
 
-  defp process_message(peer, _torrent_info, 8, 13, _socket) do
+  defp process_message(peer, _torrent_info, @msg_cancel, 13, _socket) do
     puts(peer, "Msg: cancel")
     peer
   end
 
   defp process_message(peer, _torrent_info, id, length, _socket) do
     puts(peer, "Msg: unknown id: #{id}, length: #{length}")
+    raise "Stopping because unknown"
     peer
   end
 
@@ -152,11 +186,40 @@ defmodule Bittorrent.PeerCommunication do
   defp send_request(peer, socket, {block, begin, block_size}) do
     puts(peer, "Send: request #{block}")
 
-    :gen_tcp.send(socket, <<
-      block,
-      begin,
-      block_size
-    >>)
+    :ok =
+      :gen_tcp.send(socket, <<
+        13::unsigned-integer-size(32),
+        @msg_request::unsigned-integer-size(8),
+        block::unsigned-integer-size(32),
+        begin::unsigned-integer-size(32),
+        block_size::unsigned-integer-size(32)
+      >>)
+
+    peer
+  end
+
+  defp send_interested(peer, socket) do
+    puts(peer, "Send: interested")
+
+    :ok =
+      :gen_tcp.send(
+        socket,
+        <<1::unsigned-integer-size(32), @msg_interested::unsigned-integer-size(8)>>
+      )
+
+    %Peer{peer | interested_in: true}
+  end
+
+  defp send_not_interested(peer, socket) do
+    puts(peer, "Send: not interested")
+
+    :ok =
+      :gen_tcp.send(
+        socket,
+        <<1::unsigned-integer-size(32), @msg_not_interested::unsigned-integer-size(8)>>
+      )
+
+    %Peer{peer | interested_in: false}
   end
 
   # handshake: <pstrlen><pstr><reserved><info_hash><peer_id>
