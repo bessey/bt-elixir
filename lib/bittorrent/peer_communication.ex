@@ -1,12 +1,9 @@
 defmodule Bittorrent.PeerCommunication do
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
+  alias Bittorrent.{Peer, Torrent, Piece}
 
-  defmodule Peer do
-    defstruct [:name, :reserved, :info_hash, :peer_id]
-  end
-
-  def connect_to_peer({ip, port}, info_hash, peer_id) do
+  def connect_to_peer({ip, port}, torrent_info, peer_id) do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
 
     case :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000) do
@@ -14,77 +11,88 @@ defmodule Bittorrent.PeerCommunication do
         {:error, error}
 
       {:ok, socket} ->
-        handshake = handshake_message(info_hash, peer_id)
+        handshake = handshake_message(torrent_info.info_sha, peer_id)
         :ok = :gen_tcp.send(socket, handshake)
-        peer = receive_handshake(socket)
+        peer = receive_handshake(socket, torrent_info)
         {:ok, peer, socket}
     end
   end
 
-  def receive_loop(_peer, socket) do
+  def receive_loop(peer, torrent_info, socket) do
     case :gen_tcp.recv(socket, 4) do
       {:error, :enotconn} ->
         IO.puts("Error: Not Conn")
 
       {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
-        receive_message(msg_length, socket)
+        receive_message(peer, torrent_info, msg_length, socket)
     end
   end
 
-  defp receive_message(0, _socket) do
+  defp receive_message(_peer, _torrent_info, 0, __socket) do
     IO.puts("Keep Alive")
   end
 
-  defp receive_message(length, socket) do
+  defp receive_message(peer, torrent_info, length, socket) do
     id = receive_message_id(socket)
-    IO.puts("Received message #{id}")
-    receive_useful_message(id, length, socket)
+    peer = process_message(peer, torrent_info, id, length, socket)
+    IO.inspect(peer)
+    receive_message(peer, torrent_info, length, socket)
   end
 
-  defp receive_useful_message(0, 1, socket) do
+  defp process_message(peer, _torrent_info, 0, 1, _socket) do
     IO.puts("Msg: choke")
+    peer
   end
 
-  defp receive_useful_message(1, 1, socket) do
+  defp process_message(peer, _torrent_info, 1, 1, _socket) do
     IO.puts("Msg: unchoke")
+    peer
   end
 
-  defp receive_useful_message(2, 1, socket) do
+  defp process_message(peer, _torrent_info, 2, 1, _socket) do
     IO.puts("Msg: interested")
+    peer
   end
 
-  defp receive_useful_message(3, 1, socket) do
+  defp process_message(peer, _torrent_info, 3, 1, _socket) do
     IO.puts("Msg: not interested")
+    peer
   end
 
-  defp receive_useful_message(4, 5, socket) do
+  defp process_message(peer, _torrent_info, 4, 5, _socket) do
     IO.puts("Msg: have")
+    peer
   end
 
-  defp receive_useful_message(5, length, socket) do
+  defp process_message(peer, _torrent_info, 5, length, socket) do
     IO.puts("Msg: bitfield #{length}")
     length_rem = length - 1
 
     case :gen_tcp.recv(socket, length_rem) do
-      {:ok, bitfield} ->
-        IO.puts(Base.encode16(bitfield))
+      {:ok, <<bitfield::bits>>} ->
+        IO.inspect(bitfield)
+        %Peer{peer | pieces: Piece.update_with_bitfield(peer.pieces, bitfield)}
     end
   end
 
-  defp receive_useful_message(6, 13, socket) do
+  defp process_message(peer, _torrent_info, 6, 13, _socket) do
     IO.puts("Msg: request")
+    peer
   end
 
-  defp receive_useful_message(7, length, socket) do
+  defp process_message(peer, _torrent_info, 7, _length, _socket) do
     IO.puts("Msg: piece")
+    peer
   end
 
-  defp receive_useful_message(8, 13, socket) do
+  defp process_message(peer, _torrent_info, 8, 13, _socket) do
     IO.puts("Msg: cancel")
+    peer
   end
 
-  defp receive_useful_message(id, length, _socket) do
+  defp process_message(peer, _torrent_info, id, length, _socket) do
     IO.puts("Msg: unknown #{id}, length #{length}")
+    peer
   end
 
   defp receive_message_id(socket) do
@@ -92,7 +100,7 @@ defmodule Bittorrent.PeerCommunication do
     msg_id
   end
 
-  defp receive_handshake(socket) do
+  defp receive_handshake(socket, torrent_info) do
     case :gen_tcp.recv(socket, 1) do
       {:error, :closed} ->
         IO.puts("Conn: Closed")
@@ -111,7 +119,14 @@ defmodule Bittorrent.PeerCommunication do
           >>
         } = :gen_tcp.recv(socket, base_length + pstr_length)
 
-        %Peer{name: pstr, reserved: reserved, info_hash: info_hash, peer_id: peer_id}
+        %Peer{
+          name: pstr,
+          reserved: reserved,
+          info_hash: info_hash,
+          peer_id: peer_id,
+          # Assume new peers have nothing until we know otherwise
+          pieces: Torrent.empty_pieces(torrent_info)
+        }
     end
   end
 

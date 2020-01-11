@@ -1,3 +1,3 @@
 defmodule Bittorrent.File do
-  defstruct [:path, :length]
+  defstruct [:path, :size]
 end

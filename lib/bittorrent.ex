@@ -36,27 +36,27 @@ defmodule Bittorrent do
     pid = peer_id()
     info_sha = info_hash(torrent["info"])
 
-    piece_length = torrent["info"]["piece length"]
+    piece_size = torrent["info"]["piece length"]
 
     # Hardcoded for single file mode for now
     file = %Bittorrent.File{
       path: torrent["info"]["name"],
-      length: torrent["info"]["length"]
+      size: torrent["info"]["length"]
     }
 
     pieces =
       torrent["info"]["pieces"]
       |> piece_shas_from_binary
-      |> Piece.from_shas(file.length, piece_length)
+      |> Piece.from_shas(file.size, piece_size)
 
     torrent_info = %Torrent{
       info_sha: info_sha,
       files: [file],
       pieces: pieces,
-      piece_length: piece_length
+      piece_size: piece_size
     }
 
-    IO.inspect(torrent_info, limit: :infinity)
+    # IO.inspect(torrent_info, limit: :infinity)
 
     params = %{
       info_hash: torrent_info.info_sha,
@@ -77,15 +77,16 @@ defmodule Bittorrent do
 
     # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
 
-    Enum.slice(peers, 0..3)
+    Enum.shuffle(peers)
+    |> Enum.slice(0..3)
     |> Enum.map(fn peer ->
       Task.async(fn ->
-        case PeerCommunication.connect_to_peer(peer, info_sha, pid) do
+        case PeerCommunication.connect_to_peer(peer, torrent_info, pid) do
           {:error, error} ->
             IO.puts(error)
 
           {:ok, peer, socket} ->
-            PeerCommunication.receive_loop(peer, socket)
+            PeerCommunication.receive_loop(peer, torrent_info, socket)
         end
       end)
     end)
@@ -100,8 +101,8 @@ defmodule Bittorrent do
   end
 
   defp peer_id() do
-    length = 20
-    :crypto.strong_rand_bytes(length) |> Base.url_encode64() |> binary_part(0, length)
+    size = 20
+    :crypto.strong_rand_bytes(size) |> Base.url_encode64() |> binary_part(0, size)
   end
 
   # The peers value may be a string consisting of multiples of 6 bytes.
