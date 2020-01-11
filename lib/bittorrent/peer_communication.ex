@@ -1,7 +1,7 @@
 defmodule Bittorrent.PeerCommunication do
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
-  alias Bittorrent.{Peer, Torrent, Piece}
+  alias Bittorrent.{Peer, Torrent}
 
   def connect_to_peer({ip, port}, torrent_info, peer_id) do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
@@ -25,6 +25,7 @@ defmodule Bittorrent.PeerCommunication do
 
       {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
         peer = receive_message(peer, torrent_info, msg_length, socket)
+        IO.inspect(peer)
         receive_loop(peer, torrent_info, socket)
     end
   end
@@ -69,7 +70,7 @@ defmodule Bittorrent.PeerCommunication do
 
     case :gen_tcp.recv(socket, length_rem) do
       {:ok, <<bitfield::bits>>} ->
-        %Peer{peer | pieces: Piece.update_with_bitfield(peer.pieces, bitfield)}
+        %Peer{peer | pieces: Torrent.bitfield_pieces(bitfield)}
     end
   end
 

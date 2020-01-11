@@ -8,10 +8,6 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Connect to peers and handshake with them
 - Record what pieces individual peers actually have
 
-## Wrong
-
-- Thought bitfield was per block, but its just per piece, need to fix
-
 ## To Do
 
 - Send requests for blocks

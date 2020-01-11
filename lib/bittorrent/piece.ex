@@ -39,18 +39,6 @@ defmodule Bittorrent.Piece do
     ]
   end
 
-  def update_with_bitfield(pieces, bitfield) do
-    blocks_in_piece = ceil(List.first(pieces).size / @block_size)
-    bit_list = for <<b::1 <- bitfield>>, into: [], do: if(b == 1, do: true, else: false)
-
-    Enum.with_index(pieces)
-    |> Enum.map(fn {piece, p_index} ->
-      offset = p_index * blocks_in_piece
-      blocks = Enum.slice(bit_list, offset..(offset + blocks_in_piece))
-      %Bittorrent.Piece{piece | blocks: blocks}
-    end)
-  end
-
   def empty_blocks_for_size(size) do
     List.duplicate(false, ceil(size / @block_size))
   end
