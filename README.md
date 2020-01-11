@@ -1,6 +1,26 @@
 # Bittorrent
 
-**TODO: Add description**
+A work in progress implementation of the [BitTorrent Specification](https://wiki.theory.org/index.php/BitTorrentSpecification#Info_Dictionary) as a method to learn Elixir.
+
+## Working
+
+- Parse a tracker file and use it to request peers from the tracker
+- Connect to peers and handshake with them
+- Record what pieces individual peers actually have
+
+## Wrong
+
+- Thought bitfield was per block, but its just per piece, need to fix
+
+## To Do
+
+- Send requests for blocks
+- Send have / cancel on completion of piece
+- Respond to requests for blocks
+- Respect choke / unchoke
+- Respect interested / not interested
+- Listen for incoming connections
+- Web UI
 
 ## Installation
 
