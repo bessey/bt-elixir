@@ -7,14 +7,17 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Parse a tracker file and use it to request peers from the tracker
 - Connect to peers and handshake with them
 - Record what pieces individual peers actually have
+- Send requests for blocks
+- Respect choke / unchoke
+- Respect interested / not interested
 
 ## To Do
 
-- Send requests for blocks
+- Save downloaded blocks to disk
+- Smarter connection pooling
+- Maintain request queue rather than serially requesting
 - Send have / cancel on completion of piece
 - Respond to requests for blocks
-- Respect choke / unchoke
-- Respect interested / not interested
 - Listen for incoming connections
 - Web UI
 
