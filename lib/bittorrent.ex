@@ -75,8 +75,11 @@ defmodule Bittorrent do
 
     # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
 
+    {:ok, _process_id} = Bittorrent.Downloader.start_link(torrent_info)
+    # :sys.trace(process_id, true)
+
     Enum.shuffle(peers)
-    |> Enum.slice(0..3)
+    |> Enum.slice(0..4)
     |> Enum.map(fn peer ->
       Task.async(fn ->
         case PeerCommunication.connect_to_peer(peer, torrent_info, pid) do

@@ -3,6 +3,8 @@ defmodule Bittorrent.Piece do
 
   defstruct [:sha, :size, :number, :blocks]
 
+  def block_size, do: @block_size
+
   def from_shas([sha | rest], torrent_size, piece_size) do
     [
       %Bittorrent.Piece{
