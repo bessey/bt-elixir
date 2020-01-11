@@ -10,22 +10,25 @@ defmodule Bittorrent.PeerCommunication do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
 
     case :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000) do
-      {:error, :econnrefused} ->
-        IO.puts("Conn: Refused")
-
-      {:error, :timeout} ->
-        IO.puts("Conn: Timeout")
+      {:error, error} ->
+        {:error, error}
 
       {:ok, socket} ->
         handshake = handshake_message(info_hash, peer_id)
         :ok = :gen_tcp.send(socket, handshake)
-        receive_handshake(socket)
+        peer = receive_handshake(socket)
+        {:ok, peer, socket}
     end
   end
 
-  def receive_loop(socket) do
-    {:ok, <<msg_length::unsigned-integer-size(32)>>} = :gen_tcp.recv(socket, 4)
-    receive_message(msg_length, socket)
+  def receive_loop(_peer, socket) do
+    case :gen_tcp.recv(socket, 4) do
+      {:error, :enotconn} ->
+        IO.puts("Error: Not Conn")
+
+      {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
+        receive_message(msg_length, socket)
+    end
   end
 
   defp receive_message(0, _socket) do
@@ -59,7 +62,13 @@ defmodule Bittorrent.PeerCommunication do
   end
 
   defp receive_useful_message(5, length, socket) do
-    IO.puts("Msg: bitfield")
+    IO.puts("Msg: bitfield #{length}")
+    length_rem = length - 1
+
+    case :gen_tcp.recv(socket, length_rem) do
+      {:ok, bitfield} ->
+        IO.puts(Base.encode16(bitfield))
+    end
   end
 
   defp receive_useful_message(6, 13, socket) do

@@ -2,7 +2,7 @@ defmodule Bittorrent do
   @port 6881
   use Bitwise, only_operators: true
   require Logger
-  alias Bittorrent.Peer
+  alias Bittorrent.{PeerCommunication, Torrent, Piece}
 
   @moduledoc """
   BitTorrent File Downloader.
@@ -36,13 +36,35 @@ defmodule Bittorrent do
     pid = peer_id()
     info_sha = info_hash(torrent["info"])
 
+    piece_length = torrent["info"]["piece length"]
+
+    # Hardcoded for single file mode for now
+    file = %Bittorrent.File{
+      path: torrent["info"]["name"],
+      length: torrent["info"]["length"]
+    }
+
+    pieces =
+      torrent["info"]["pieces"]
+      |> piece_shas_from_binary
+      |> Piece.from_shas(file.length, piece_length)
+
+    torrent_info = %Torrent{
+      info_sha: info_sha,
+      files: [file],
+      pieces: pieces,
+      piece_length: piece_length
+    }
+
+    IO.inspect(torrent_info, limit: :infinity)
+
     params = %{
-      info_hash: info_sha,
+      info_hash: torrent_info.info_sha,
       peer_id: pid,
       port: to_string(@port),
-      uploaded: "0",
-      downloaded: "0",
-      left: left(torrent["info"]),
+      uploaded: torrent_info.uploaded,
+      downloaded: torrent_info.downloaded,
+      left: Torrent.left(torrent_info),
       compact: "1",
       no_peer_id: "true",
       event: "started"
@@ -57,7 +79,15 @@ defmodule Bittorrent do
 
     Enum.slice(peers, 0..3)
     |> Enum.map(fn peer ->
-      Task.async(fn -> PeerCommunication.connect_to_peer(peer, info_sha, pid) end)
+      Task.async(fn ->
+        case PeerCommunication.connect_to_peer(peer, info_sha, pid) do
+          {:error, error} ->
+            IO.puts(error)
+
+          {:ok, peer, socket} ->
+            PeerCommunication.receive_loop(peer, socket)
+        end
+      end)
     end)
     |> Enum.map(&Task.await/1)
 
@@ -74,21 +104,15 @@ defmodule Bittorrent do
     :crypto.strong_rand_bytes(length) |> Base.url_encode64() |> binary_part(0, length)
   end
 
-  # Single file mode
-  defp left(%{"length" => length}) do
-    length |> to_string()
-  end
-
-  # Multi file mode
-  defp left(%{"files" => files}) do
-    Enum.map(files, & &1["length"]) |> Enum.sum() |> to_string()
-  end
-
   # The peers value may be a string consisting of multiples of 6 bytes.
   # First 4 bytes are the IP address and last 2 bytes are the port number.
   # All in network (big endian) notation.
   defp peers_from_binary(binary) do
     binary |> :binary.bin_to_list() |> Enum.chunk_every(6) |> Enum.map(&peer_from_binary/1)
+  end
+
+  defp piece_shas_from_binary(binary) do
+    binary |> :binary.bin_to_list() |> Enum.chunk_every(20) |> Enum.map(&to_string/1)
   end
 
   defp peer_from_binary(binary) do
