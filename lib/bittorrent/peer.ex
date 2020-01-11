@@ -6,11 +6,11 @@ defmodule Bittorrent.Peer do
     :id,
     :pieces,
     # Their feelings for us
-    choked: false,
+    choked: true,
     interested: false,
     # Our feelings for them
     interested_in: false,
-    choking: false
+    choking: true
   ]
 
   def have_piece(peer, piece) do
