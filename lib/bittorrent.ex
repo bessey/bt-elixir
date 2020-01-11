@@ -56,8 +56,6 @@ defmodule Bittorrent do
       piece_size: piece_size
     }
 
-    # IO.inspect(torrent_info, limit: :infinity)
-
     params = %{
       info_hash: torrent_info.info_sha,
       peer_id: pid,
@@ -90,7 +88,7 @@ defmodule Bittorrent do
         end
       end)
     end)
-    |> Enum.map(&Task.await/1)
+    |> Enum.map(fn task -> Task.await(task, :infinity) end)
 
     nil
   end

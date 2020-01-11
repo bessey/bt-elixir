@@ -24,7 +24,8 @@ defmodule Bittorrent.PeerCommunication do
         IO.puts("Error: Not Conn")
 
       {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
-        receive_message(peer, torrent_info, msg_length, socket)
+        peer = receive_message(peer, torrent_info, msg_length, socket)
+        receive_loop(peer, torrent_info, socket)
     end
   end
 
@@ -34,9 +35,7 @@ defmodule Bittorrent.PeerCommunication do
 
   defp receive_message(peer, torrent_info, length, socket) do
     id = receive_message_id(socket)
-    peer = process_message(peer, torrent_info, id, length, socket)
-    IO.inspect(peer)
-    receive_message(peer, torrent_info, length, socket)
+    process_message(peer, torrent_info, id, length, socket)
   end
 
   defp process_message(peer, _torrent_info, 0, 1, _socket) do
@@ -70,7 +69,6 @@ defmodule Bittorrent.PeerCommunication do
 
     case :gen_tcp.recv(socket, length_rem) do
       {:ok, <<bitfield::bits>>} ->
-        IO.inspect(bitfield)
         %Peer{peer | pieces: Piece.update_with_bitfield(peer.pieces, bitfield)}
     end
   end
@@ -91,7 +89,7 @@ defmodule Bittorrent.PeerCommunication do
   end
 
   defp process_message(peer, _torrent_info, id, length, _socket) do
-    IO.puts("Msg: unknown #{id}, length #{length}")
+    IO.puts("Msg: unknown id: #{id}, length: #{length}")
     peer
   end
 
