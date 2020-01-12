@@ -12,8 +12,8 @@ defmodule Bittorrent.Downloader do
     GenServer.call(:downloader, {:request_block, peer_pieces})
   end
 
-  def block_downloaded(index, block) do
-    GenServer.cast(:downloader, {:block_downloaded, index, block})
+  def block_downloaded(block, data) do
+    GenServer.cast(:downloader, {:block_downloaded, block, data})
   end
 
   # Server (callbacks)
@@ -32,8 +32,10 @@ defmodule Bittorrent.Downloader do
   end
 
   @impl true
-  def handle_cast({:block_downloaded, block, _data}, state) do
+  def handle_cast({:block_downloaded, block, data}, torrent) do
     IO.puts("Block downloaded: #{block}")
-    {:noreply, state}
+    :ok = File.write(Path.join([torrent.output_path, "_blocks", "#{block}.tmp"]), data)
+    pieces = Torrent.pieces_with_block_downloaded(torrent.pieces, block)
+    {:noreply, %Torrent{torrent | pieces: pieces}}
   end
 end

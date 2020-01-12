@@ -116,17 +116,15 @@ defmodule Bittorrent.PeerCommunication do
   end
 
   defp process_message(peer, _torrent_info, @msg_piece, length, socket) do
-    block_length = (length - 9) * 8
-
     case :gen_tcp.recv(socket, length - 1) do
       {:ok,
        <<
-         index::unsigned-integer-size(32),
+         block::unsigned-integer-size(32),
          _begin::unsigned-integer-size(32),
-         block::unsigned-integer-size(block_length)
+         data::binary
        >>} ->
-        puts(peer, "Msg: piece #{index}")
-        Bittorrent.Downloader.block_downloaded(index, block)
+        puts(peer, "Msg: piece #{block}")
+        Bittorrent.Downloader.block_downloaded(block, data)
         peer
     end
 

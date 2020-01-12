@@ -1,11 +1,39 @@
 defmodule Bittorrent.Torrent do
-  defstruct [:info_sha, :pieces, :piece_size, :name, :files, uploaded: 0, downloaded: 0]
+  defstruct [
+    :announce,
+    :info_sha,
+    :pieces,
+    :piece_size,
+    :name,
+    :files,
+    :output_path,
+    uploaded: 0,
+    downloaded: 0
+  ]
 
-  def left(%Bittorrent.Torrent{files: files}) do
+  alias Bittorrent.Torrent
+
+  def fetch_info_from_tracker(%Torrent{} = torrent, peer_id, port) do
+    params = %{
+      peer_id: peer_id,
+      port: to_string(port),
+      info_hash: torrent.info_sha,
+      uploaded: torrent.uploaded,
+      downloaded: torrent.downloaded,
+      left: Torrent.left(torrent),
+      compact: "1",
+      no_peer_id: "true",
+      event: "started"
+    }
+
+    HTTPoison.get!(torrent.announce, [], params: params).body |> Bento.decode!()
+  end
+
+  def left(%Torrent{files: files}) do
     Enum.map(files, & &1.size) |> Enum.sum()
   end
 
-  def empty_pieces(%Bittorrent.Torrent{} = torrent) do
+  def empty_pieces(%Torrent{} = torrent) do
     List.duplicate(false, length(torrent.pieces))
   end
 
@@ -13,7 +41,7 @@ defmodule Bittorrent.Torrent do
     for <<b::1 <- bitfield>>, into: [], do: if(b == 1, do: true, else: false)
   end
 
-  def size(%Bittorrent.Torrent{} = torrent) do
+  def size(%Torrent{} = torrent) do
     List.first(torrent.files).size
   end
 
@@ -45,5 +73,28 @@ defmodule Bittorrent.Torrent do
       end
 
     {block, begin, block_size}
+  end
+
+  def pieces_with_block_downloaded(pieces, block) do
+    {piece_index, block_index_in_piece} =
+      piece_index_and_block_index_in_piece_for_block(pieces, block)
+
+    Enum.map(pieces, fn piece ->
+      if piece.number == piece_index do
+        %Bittorrent.Piece{
+          piece
+          | blocks: List.replace_at(piece.blocks, block_index_in_piece, true)
+        }
+      else
+        piece
+      end
+    end)
+  end
+
+  defp piece_index_and_block_index_in_piece_for_block(pieces, block) do
+    blocks_in_piece = length(Enum.at(pieces, 0).blocks)
+    piece_index = floor(block / blocks_in_piece)
+    block_index_in_piece = block - piece_index * blocks_in_piece
+    {piece_index, block_index_in_piece}
   end
 end
