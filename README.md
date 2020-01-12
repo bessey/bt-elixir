@@ -10,10 +10,10 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Send requests for blocks
 - Respect choke / unchoke
 - Respect interested / not interested
+- Save downloaded blocks to disk
 
 ## To Do
 
-- Save downloaded blocks to disk
 - Smarter connection pooling
 - Maintain request queue rather than serially requesting
 - Send have / cancel on completion of piece
