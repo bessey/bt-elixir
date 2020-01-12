@@ -2,7 +2,7 @@ defmodule Bittorrent do
   @port 6881
   use Bitwise, only_operators: true
   require Logger
-  alias Bittorrent.{PeerCommunication, Torrent, Piece}
+  alias Bittorrent.{PeerCommunication, Torrent, Piece, Downloader}
 
   @moduledoc """
   BitTorrent File Downloader.
@@ -48,7 +48,7 @@ defmodule Bittorrent do
 
     # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
 
-    {:ok, _process_id} = Bittorrent.Downloader.start_link(torrent_info)
+    {:ok, _process_id} = Downloader.start_link(torrent_info)
     # :sys.trace(process_id, true)
 
     Enum.shuffle(peers)
@@ -101,6 +101,6 @@ defmodule Bittorrent do
   defp prepare_output(output_path) do
     # File.rm_rf!(output_path)
     File.mkdir_p!(output_path)
-    File.mkdir_p!(Path.join([output_path, "_blocks"]))
+    File.mkdir_p!(Path.join([output_path, Downloader.in_progress_path()]))
   end
 end
