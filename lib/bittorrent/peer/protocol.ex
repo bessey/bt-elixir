@@ -1,7 +1,7 @@
-defmodule Bittorrent.PeerCommunication do
+defmodule Bittorrent.Peer.Protocol do
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
-  alias Bittorrent.{Peer, Torrent}
+  alias Bittorrent.{Peer.State, Torrent}
 
   @msg_choke 0
   @msg_unchoke 1
@@ -40,11 +40,11 @@ defmodule Bittorrent.PeerCommunication do
     end
   end
 
-  def send_loop(%Peer{choking: true} = peer, socket) do
+  def send_loop(%State{choking: true} = peer, socket) do
     send_unchoke(peer, socket)
   end
 
-  def send_loop(%Peer{choked: false} = peer, socket) do
+  def send_loop(%State{choked: false} = peer, socket) do
     if request = Bittorrent.Downloader.request_block(peer.pieces) do
       peer =
         if peer.interested_in do
@@ -75,29 +75,29 @@ defmodule Bittorrent.PeerCommunication do
 
   defp process_message(peer, _torrent_info, @msg_choke, 1, _socket) do
     puts(peer, "Msg: choke")
-    %Peer{peer | choked: true}
+    %State{peer | choked: true}
   end
 
   defp process_message(peer, _torrent_info, @msg_unchoke, 1, _socket) do
     puts(peer, "Msg: unchoke")
-    %Peer{peer | choked: false}
+    %State{peer | choked: false}
   end
 
   defp process_message(peer, _torrent_info, @msg_interested, 1, _socket) do
     puts(peer, "Msg: interested")
-    %Peer{peer | interested: true, choked: false}
+    %State{peer | interested: true, choked: false}
   end
 
   defp process_message(peer, _torrent_info, @msg_not_interested, 1, _socket) do
     puts(peer, "Msg: not interested")
-    %Peer{peer | interested: false, choked: false}
+    %State{peer | interested: false, choked: false}
   end
 
   defp process_message(peer, _torrent_info, @msg_have, 5 = length, socket) do
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<piece::unsigned-integer-size(32)>>} ->
         puts(peer, "Msg: have #{piece}")
-        %Peer{Peer.have_piece(peer, piece) | choked: false}
+        %State{State.have_piece(peer, piece) | choked: false}
     end
   end
 
@@ -106,7 +106,7 @@ defmodule Bittorrent.PeerCommunication do
 
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
-        %Peer{peer | pieces: Torrent.bitfield_pieces(bitfield), choked: false}
+        %State{peer | pieces: Torrent.bitfield_pieces(bitfield), choked: false}
     end
   end
 
@@ -167,7 +167,7 @@ defmodule Bittorrent.PeerCommunication do
 
         IO.puts("Connected: #{Base.encode64(peer_id)}")
 
-        %Peer{
+        %State{
           name: to_string(pstr),
           reserved: reserved,
           info_hash: info_hash,
@@ -211,7 +211,7 @@ defmodule Bittorrent.PeerCommunication do
         <<1::unsigned-integer-size(32), @msg_interested::unsigned-integer-size(8)>>
       )
 
-    %Peer{peer | interested_in: true}
+    %State{peer | interested_in: true}
   end
 
   defp send_not_interested(peer, socket) do
@@ -223,7 +223,7 @@ defmodule Bittorrent.PeerCommunication do
         <<1::unsigned-integer-size(32), @msg_not_interested::unsigned-integer-size(8)>>
       )
 
-    %Peer{peer | interested_in: false}
+    %State{peer | interested_in: false}
   end
 
   defp send_unchoke(peer, socket) do
@@ -235,7 +235,7 @@ defmodule Bittorrent.PeerCommunication do
         <<1::unsigned-integer-size(32), @msg_unchoke::unsigned-integer-size(8)>>
       )
 
-    %Peer{peer | choking: false}
+    %State{peer | choking: false}
   end
 
   defp send_choke(peer, socket) do
@@ -247,7 +247,7 @@ defmodule Bittorrent.PeerCommunication do
         <<1::unsigned-integer-size(32), @msg_choke::unsigned-integer-size(8)>>
       )
 
-    %Peer{peer | choking: true}
+    %State{peer | choking: true}
   end
 
   # handshake: <pstrlen><pstr><reserved><info_hash><peer_id>

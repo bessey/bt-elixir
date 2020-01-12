@@ -2,7 +2,7 @@ defmodule Bittorrent do
   @port 6881
   use Bitwise, only_operators: true
   require Logger
-  alias Bittorrent.{PeerCommunication, Torrent, Piece, Downloader}
+  alias Bittorrent.{Peer, Torrent, Piece, Downloader}
 
   @moduledoc """
   BitTorrent File Downloader.
@@ -55,12 +55,12 @@ defmodule Bittorrent do
     |> Enum.slice(0..4)
     |> Enum.map(fn peer ->
       Task.async(fn ->
-        case PeerCommunication.connect_to_peer(peer, torrent_info, peer_id) do
+        case Peer.Protocol.connect_to_peer(peer, torrent_info, peer_id) do
           {:error, error} ->
             IO.puts(error)
 
           {:ok, peer, socket} ->
-            PeerCommunication.receive_loop(peer, torrent_info, socket)
+            Peer.Protocol.receive_loop(peer, torrent_info, socket)
         end
       end)
     end)
