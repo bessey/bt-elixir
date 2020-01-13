@@ -1,6 +1,5 @@
 defmodule Bittorrent do
   @port 6881
-  use Bitwise, only_operators: true
   require Logger
   alias Bittorrent.{Peer, Torrent, Piece, Downloader}
 
@@ -18,9 +17,6 @@ defmodule Bittorrent do
 
     HTTPoison.start()
 
-    peer_id = generate_peer_id()
-    info_sha = info_hash(torrent["info"])
-
     piece_size = torrent["info"]["piece length"]
 
     # Hardcoded for single file mode for now
@@ -36,37 +32,43 @@ defmodule Bittorrent do
 
     torrent_info = %Torrent{
       announce: torrent["announce"],
-      info_sha: info_sha,
+      peer_id: generate_peer_id(),
+      info_sha: info_hash(torrent["info"]),
       files: [file],
       pieces: pieces,
       piece_size: piece_size,
       output_path: output_path
     }
 
-    response = Torrent.fetch_info_from_tracker(torrent_info, peer_id, @port)
-    peers = peers_from_binary(response["peers"])
+    torrent_info = Torrent.update_with_tracker_info(torrent_info, @port)
 
     # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
 
     {:ok, _process_id} = Downloader.start_link(torrent_info)
     # :sys.trace(process_id, true)
 
-    Enum.shuffle(peers)
-    |> Enum.slice(0..4)
+    maintain_connections(10, torrent_info)
+
+    nil
+  end
+
+  defp maintain_connections(count, torrent_info) do
+    Enum.shuffle(torrent_info.peers)
+    |> Enum.slice(0..(count - 1))
     |> Enum.map(fn peer ->
       Task.async(fn ->
-        case Peer.Protocol.connect_to_peer(peer, torrent_info, peer_id) do
+        case Peer.Protocol.connect_to_peer(peer, torrent_info) do
           {:error, error} ->
             IO.puts(error)
 
-          {:ok, peer, socket} ->
-            Peer.Protocol.receive_loop(peer, torrent_info, socket)
+          {:ok, connected_peer, socket} ->
+            Downloader.peer_connected(connected_peer.id, socket)
+            Peer.Protocol.receive_loop(connected_peer, torrent_info, socket)
+            Downloader.peer_disconnected(connected_peer.id)
         end
       end)
     end)
     |> Enum.map(fn task -> Task.await(task, :infinity) end)
-
-    nil
   end
 
   defp info_hash(info) do
@@ -79,23 +81,8 @@ defmodule Bittorrent do
     :crypto.strong_rand_bytes(size) |> Base.url_encode64() |> binary_part(0, size)
   end
 
-  # The peers value may be a string consisting of multiples of 6 bytes.
-  # First 4 bytes are the IP address and last 2 bytes are the port number.
-  # All in network (big endian) notation.
-  defp peers_from_binary(binary) do
-    binary |> :binary.bin_to_list() |> Enum.chunk_every(6) |> Enum.map(&peer_from_binary/1)
-  end
-
   defp piece_shas_from_binary(binary) do
     binary |> :binary.bin_to_list() |> Enum.chunk_every(20) |> Enum.map(&to_string/1)
-  end
-
-  defp peer_from_binary(binary) do
-    ip = Enum.slice(binary, 0, 4) |> List.to_tuple() |> :inet_parse.ntoa()
-    port_bytes = Enum.slice(binary, 4, 2)
-    port = (Enum.fetch!(port_bytes, 0) <<< 8) + Enum.fetch!(port_bytes, 1)
-
-    {ip, port}
   end
 
   defp prepare_output(output_path) do

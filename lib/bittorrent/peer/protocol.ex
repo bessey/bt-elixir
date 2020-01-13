@@ -13,15 +13,15 @@ defmodule Bittorrent.Peer.Protocol do
   @msg_piece 7
   @msg_cancel 8
 
-  def connect_to_peer({ip, port}, torrent_info, peer_id) do
+  def connect_to_peer({ip, port}, torrent_info) do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
 
-    case :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000) do
-      {:error, error} ->
-        {:error, error}
-
-      {:ok, socket} ->
-        send_handshake(torrent_info, peer_id, socket)
+    with {:ok, socket} <-
+           :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000),
+         {:ok, peer} <- send_and_receive_handshake(torrent_info, socket) do
+      {:ok, peer, socket}
+    else
+      error -> error
     end
   end
 
@@ -148,43 +148,40 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   defp receive_handshake(socket, torrent_info) do
-    case :gen_tcp.recv(socket, 1) do
-      {:error, :closed} ->
-        IO.puts("Conn: Closed")
+    base_length = 48
 
-      {:ok, <<pstr_length::unsigned-integer-size(8)>>} ->
-        base_length = 48
+    with {:ok, <<pstr_length::unsigned-integer-size(8)>>} <- :gen_tcp.recv(socket, 1),
+         {
+           :ok,
+           <<
+             pstr::binary-size(pstr_length),
+             reserved::unsigned-integer-size(64),
+             info_hash::binary-size(20),
+             peer_id::binary-size(20)
+           >>
+         } <- :gen_tcp.recv(socket, base_length + pstr_length) do
+      IO.puts("Connected: #{Base.encode64(peer_id)}")
 
-        {
-          :ok,
-          <<
-            pstr::binary-size(pstr_length),
-            reserved::unsigned-integer-size(64),
-            info_hash::binary-size(20),
-            peer_id::binary-size(20)
-          >>
-        } = :gen_tcp.recv(socket, base_length + pstr_length)
-
-        IO.puts("Connected: #{Base.encode64(peer_id)}")
-
-        %State{
-          name: to_string(pstr),
-          reserved: reserved,
-          info_hash: info_hash,
-          id: peer_id,
-          # Assume new peers have nothing until we know otherwise
-          pieces: Torrent.empty_pieces(torrent_info)
-        }
+      {:ok,
+       %State{
+         name: to_string(pstr),
+         reserved: reserved,
+         info_hash: info_hash,
+         id: peer_id,
+         # Assume new peers have nothing until we know otherwise
+         pieces: Torrent.empty_pieces(torrent_info)
+       }}
+    else
+      error -> error
     end
   end
 
   # Send Protocols
 
-  defp send_handshake(torrent_info, peer_id, socket) do
-    handshake = handshake_message(torrent_info.info_sha, peer_id)
+  defp send_and_receive_handshake(torrent_info, socket) do
+    handshake = handshake_message(torrent_info.info_sha, torrent_info.peer_id)
     :ok = :gen_tcp.send(socket, handshake)
-    peer = receive_handshake(socket, torrent_info)
-    {:ok, peer, socket}
+    receive_handshake(socket, torrent_info)
   end
 
   defp send_request(peer, socket, {block, begin, block_size}) do
