@@ -54,19 +54,21 @@ defmodule Bittorrent.Torrent do
     List.first(torrent.files).size
   end
 
-  # Get the indexes of all the blocks the given torrent needs, that the piece_set provided has
-  def blocks_for_pieces(torrent, piece_set) do
-    torrent.pieces
-    |> Enum.filter(fn piece ->
-      # Don't consider blocks the peer doesn't have
-      Enum.at(piece_set, piece.number)
-    end)
-    |> Enum.flat_map(fn piece ->
-      piece.blocks
-      |> Enum.with_index()
-      |> Enum.filter(& &1)
-      |> Enum.map(fn {_have_piece, index} -> index end)
-    end)
+  def blocks_we_need_that_peer_has(pieces, piece_set) do
+    blocks_in_a_piece = length(Enum.at(pieces, 0).blocks)
+
+    pieces
+    |> Enum.filter(fn piece -> Enum.at(piece_set, piece.number) end)
+    |> Enum.flat_map(fn piece -> blocks_we_need_in_piece(piece, blocks_in_a_piece) end)
+  end
+
+  defp blocks_we_need_in_piece(piece, blocks_in_a_piece) do
+    block_offset = blocks_in_a_piece * piece.number
+
+    piece.blocks
+    |> Enum.with_index(block_offset)
+    |> Enum.reject(fn {we_have_block?, _block_index} -> we_have_block? end)
+    |> Enum.map(fn {_we_have_block?, block_index} -> block_index end)
   end
 
   def request_for_block(torrent, block) do
@@ -90,15 +92,15 @@ defmodule Bittorrent.Torrent do
 
     pieces =
       Enum.map(torrent.pieces, fn piece ->
-      if piece.number == piece_index do
-        %Bittorrent.Piece{
+        if piece.number == piece_index do
+          %Bittorrent.Piece{
+            piece
+            | blocks: List.replace_at(piece.blocks, block_index_in_piece, true)
+          }
+        else
           piece
-          | blocks: List.replace_at(piece.blocks, block_index_in_piece, true)
-        }
-      else
-        piece
-      end
-    end)
+        end
+      end)
 
     %Torrent{torrent | pieces: pieces, downloaded: torrent.downloaded + block_size}
   end
