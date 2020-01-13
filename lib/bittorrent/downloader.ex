@@ -1,6 +1,6 @@
 defmodule Bittorrent.Downloader do
   use GenServer
-  alias Bittorrent.Torrent
+  alias Bittorrent.{Torrent, Piece}
 
   @blocks_in_progress_path "_blocks"
   @tmp_extension ".tmp"
@@ -17,8 +17,8 @@ defmodule Bittorrent.Downloader do
     GenServer.call(:downloader, {:request_block, peer_pieces})
   end
 
-  def block_downloaded(block, data) do
-    GenServer.cast(:downloader, {:block_downloaded, block, data})
+  def block_downloaded(piece_index, begin, data) do
+    GenServer.cast(:downloader, {:block_downloaded, piece_index, begin, data})
   end
 
   def peer_connected(peer_id, socket) do
@@ -45,16 +45,35 @@ defmodule Bittorrent.Downloader do
   end
 
   @impl true
-  def handle_cast({:block_downloaded, block, data}, torrent) do
-    IO.puts("Block downloaded: #{block}")
+  def handle_cast({:block_downloaded, piece_index, begin, data}, torrent) do
+    case Piece.block_for_begin(begin) do
+      nil ->
+        IO.puts("Bad block: #{piece_index}")
+        {:noreply, torrent}
 
-    :ok =
-      File.write(
-        Path.join([torrent.output_path, @blocks_in_progress_path, "#{block}#{@tmp_extension}"]),
-        data
-      )
+      block_index ->
+        IO.puts("Block downloaded: #{piece_index}-#{block_index}")
 
-    {:noreply, Torrent.update_with_block_downloaded(torrent, block, byte_size(data))}
+        :ok =
+          File.write(
+            Path.join([
+              torrent.output_path,
+              @blocks_in_progress_path,
+              "#{piece_index}-#{block_index}#{@tmp_extension}"
+            ]),
+            data
+          )
+
+        block_size = byte_size(data)
+
+        {:noreply,
+         Torrent.update_with_block_downloaded(
+           torrent,
+           piece_index,
+           block_index,
+           block_size
+         )}
+    end
   end
 
   @impl true
@@ -81,11 +100,11 @@ defmodule Bittorrent.Downloader do
 
     existing_blocks
     |> Enum.map(&String.slice(&1, 0..tmp_extension_index))
-    |> Enum.map(&String.to_integer/1)
-    |> Enum.reduce(torrent, fn block, torrent ->
-      IO.puts("Remembering we already downloaded #{block}")
+    |> Enum.map(fn string -> String.split(string, "-") |> Enum.map(&String.to_integer/1) end)
+    |> Enum.reduce(torrent, fn [piece_index, block_index], torrent ->
+      IO.puts("Remembering we already downloaded #{piece_index}-#{block_index}")
       # TODO read block size
-      Torrent.update_with_block_downloaded(torrent, block, 0)
+      Torrent.update_with_block_downloaded(torrent, piece_index, block_index, 0)
     end)
   end
 end

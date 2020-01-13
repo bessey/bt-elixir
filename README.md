@@ -12,9 +12,6 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Respect interested / not interested
 - Save downloaded blocks to disk
 
-## Bugs
-- Totally misunderstood how "piece" works, not saving blocks correctly
-
 ## To Do
 
 - Smarter connection pooling

@@ -82,16 +82,13 @@ defmodule Bittorrent.Torrent do
     {piece_index, block_index * block_size, block_size}
   end
 
-  def update_with_block_downloaded(torrent, block, block_size) do
-    {piece_index, block_index_in_piece} =
-      piece_index_and_block_index_in_piece_for_block(torrent.pieces, block)
-
+  def update_with_block_downloaded(torrent, piece_index, block_index, block_size) do
     pieces =
       Enum.map(torrent.pieces, fn piece ->
         if piece.number == piece_index do
           %Bittorrent.Piece{
             piece
-            | blocks: List.replace_at(piece.blocks, block_index_in_piece, true)
+            | blocks: List.replace_at(piece.blocks, block_index, true)
           }
         else
           piece
@@ -99,13 +96,6 @@ defmodule Bittorrent.Torrent do
       end)
 
     %Torrent{torrent | pieces: pieces, downloaded: torrent.downloaded + block_size}
-  end
-
-  defp piece_index_and_block_index_in_piece_for_block(pieces, block) do
-    blocks_in_piece = length(Enum.at(pieces, 0).blocks)
-    piece_index = floor(block / blocks_in_piece)
-    block_index_in_piece = block - piece_index * blocks_in_piece
-    {piece_index, block_index_in_piece}
   end
 
   # The peers value may be a string consisting of multiples of 6 bytes.

@@ -119,12 +119,12 @@ defmodule Bittorrent.Peer.Protocol do
     case :gen_tcp.recv(socket, length - 1) do
       {:ok,
        <<
-         block::unsigned-integer-size(32),
-         _begin::unsigned-integer-size(32),
+         piece_index::unsigned-integer-size(32),
+         begin::unsigned-integer-size(32),
          data::binary
        >>} ->
-        puts(peer, "Msg: piece #{block}")
-        Bittorrent.Downloader.block_downloaded(block, data)
+        puts(peer, "Msg: piece #{piece_index}")
+        Bittorrent.Downloader.block_downloaded(piece_index, begin, data)
         peer
     end
 

@@ -44,4 +44,14 @@ defmodule Bittorrent.Piece do
   def empty_blocks_for_size(size) do
     List.duplicate(false, ceil(size / @block_size))
   end
+
+  def block_for_begin(begin) do
+    block = begin / @block_size
+
+    if block != round(block) do
+      nil
+    else
+      round(block)
+    end
+  end
 end
