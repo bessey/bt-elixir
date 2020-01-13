@@ -20,7 +20,7 @@ defmodule TorrentTest do
                  }
                ],
                [false, true]
-             ) == [2, 3]
+             ) == [{1, 0}, {1, 1}]
     end
 
     test "it filters out blocks we already have" do
@@ -40,7 +40,7 @@ defmodule TorrentTest do
                  }
                ],
                [false, true]
-             ) == [3]
+             ) == [{1, 1}]
     end
   end
 end

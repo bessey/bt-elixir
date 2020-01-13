@@ -55,35 +55,31 @@ defmodule Bittorrent.Torrent do
   end
 
   def blocks_we_need_that_peer_has(pieces, piece_set) do
-    blocks_in_a_piece = length(Enum.at(pieces, 0).blocks)
-
     pieces
     |> Enum.filter(fn piece -> Enum.at(piece_set, piece.number) end)
-    |> Enum.flat_map(fn piece -> blocks_we_need_in_piece(piece, blocks_in_a_piece) end)
+    |> Enum.flat_map(fn piece -> blocks_we_need_in_piece(piece) end)
   end
 
-  defp blocks_we_need_in_piece(piece, blocks_in_a_piece) do
-    block_offset = blocks_in_a_piece * piece.number
-
+  defp blocks_we_need_in_piece(piece) do
     piece.blocks
-    |> Enum.with_index(block_offset)
+    |> Enum.with_index()
     |> Enum.reject(fn {we_have_block?, _block_index} -> we_have_block? end)
-    |> Enum.map(fn {_we_have_block?, block_index} -> block_index end)
+    |> Enum.map(fn {_we_have_block?, block_index} -> {piece.number, block_index} end)
   end
 
-  def request_for_block(torrent, block) do
+  def request_for_block(torrent, piece_index, block_index) do
     block_size = Bittorrent.Piece.block_size()
     full_size = size(torrent)
-    begin = block * Bittorrent.Piece.block_size()
+    begin = block_index * Bittorrent.Piece.block_size()
 
     block_size =
       if begin + block_size > full_size do
-        size(torrent) - block_size
+        size(torrent) - begin
       else
         block_size
       end
 
-    {block, begin, block_size}
+    {piece_index, block_index * block_size, block_size}
   end
 
   def update_with_block_downloaded(torrent, block, block_size) do

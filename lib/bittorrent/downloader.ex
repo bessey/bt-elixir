@@ -38,10 +38,10 @@ defmodule Bittorrent.Downloader do
 
   @impl true
   def handle_call({:request_block, peer_pieces}, _from, torrent) do
-    blocks = Torrent.blocks_we_need_that_peer_has(torrent.pieces, peer_pieces)
-    block = blocks |> Enum.shuffle() |> List.first()
-    IO.puts("Offering block: #{block}")
-    {:reply, Torrent.request_for_block(torrent, block), torrent}
+    requests = Torrent.blocks_we_need_that_peer_has(torrent.pieces, peer_pieces)
+    {piece_index, block_index} = requests |> Enum.shuffle() |> List.first()
+    IO.puts("Offering Piece #{piece_index} Block #{block_index}")
+    {:reply, Torrent.request_for_block(torrent, piece_index, block_index), torrent}
   end
 
   @impl true
