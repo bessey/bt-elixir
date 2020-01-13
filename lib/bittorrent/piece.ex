@@ -41,6 +41,10 @@ defmodule Bittorrent.Piece do
     ]
   end
 
+  def to_bitfield(pieces) do
+    pieces |> Enum.map(& &1.blocks) |> Enum.map(&Enum.all?/1)
+  end
+
   def empty_blocks_for_size(size) do
     List.duplicate(false, ceil(size / @block_size))
   end

@@ -13,6 +13,8 @@ defmodule Bittorrent.Peer.Protocol do
   @msg_piece 7
   @msg_cancel 8
 
+  @max_requests_in_flight 10
+
   def connect_to_peer({ip, port}, torrent_info) do
     IO.puts("Connecting: #{to_string(ip)} #{port}")
 
@@ -25,7 +27,7 @@ defmodule Bittorrent.Peer.Protocol do
     end
   end
 
-  def receive_loop(peer, torrent_info, socket) do
+  def run_loop(peer, torrent_info, socket) do
     case :gen_tcp.recv(socket, 4) do
       {:error, :enotconn} ->
         IO.puts("Error: Not Conn")
@@ -34,9 +36,10 @@ defmodule Bittorrent.Peer.Protocol do
         IO.puts("Error: Closed")
 
       {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
-        peer = receive_message(peer, torrent_info, msg_length, socket)
-        peer = send_loop(peer, socket)
-        receive_loop(peer, torrent_info, socket)
+        peer
+        |> receive_message(torrent_info, msg_length, socket)
+        |> send_loop(socket)
+        |> run_loop(torrent_info, socket)
     end
   end
 
@@ -53,13 +56,28 @@ defmodule Bittorrent.Peer.Protocol do
           send_interested(peer, socket)
         end
 
-      send_request(peer, socket, request)
+      if peer.requests_in_flight < @max_requests_in_flight do
+        send_request_and_loop(peer, socket, request)
+      else
+        peer
+      end
     else
       send_not_interested(peer, socket)
     end
   end
 
   def send_loop(peer, _socket), do: peer
+
+  defp send_request_and_loop(peer, socket, request) do
+    peer = send_request(peer, socket, request)
+
+    if peer.requests_in_flight < @max_requests_in_flight do
+      request = Bittorrent.Downloader.request_block(peer.pieces)
+      send_request_and_loop(peer, socket, request)
+    else
+      peer
+    end
+  end
 
   # Receive Protocols
 
@@ -125,10 +143,8 @@ defmodule Bittorrent.Peer.Protocol do
        >>} ->
         puts(peer, "Msg: piece #{piece_index}")
         Bittorrent.Downloader.block_downloaded(piece_index, begin, data)
-        peer
+        %State{peer | requests_in_flight: peer.requests_in_flight - 1}
     end
-
-    peer
   end
 
   defp process_message(peer, _torrent_info, @msg_cancel, 13, _socket) do
@@ -185,7 +201,10 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   defp send_request(peer, socket, {block, begin, block_size}) do
-    puts(peer, "Send: request #{block}")
+    puts(
+      peer,
+      "Send: request #{block} (#{peer.requests_in_flight + 1} / #{@max_requests_in_flight}"
+    )
 
     :ok =
       :gen_tcp.send(socket, <<
@@ -196,7 +215,7 @@ defmodule Bittorrent.Peer.Protocol do
         block_size::unsigned-integer-size(32)
       >>)
 
-    peer
+    %State{peer | requests_in_flight: peer.requests_in_flight + 1}
   end
 
   defp send_interested(peer, socket) do

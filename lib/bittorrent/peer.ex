@@ -12,7 +12,9 @@ defmodule Bittorrent.Peer do
       interested: false,
       # Our feelings for them
       interested_in: false,
-      choking: true
+      choking: true,
+      # Stats
+      requests_in_flight: 0
     ]
 
     def have_piece(peer, piece) do

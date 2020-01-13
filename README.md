@@ -15,7 +15,6 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 ## To Do
 
 - Smarter connection pooling
-- Maintain request queue rather than serially requesting
 - Send have / cancel on completion of piece
 - Respond to requests for blocks
 - Listen for incoming connections

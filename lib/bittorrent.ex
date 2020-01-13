@@ -65,7 +65,7 @@ defmodule Bittorrent do
 
           {:ok, connected_peer, socket} ->
             Downloader.peer_connected(connected_peer.id, socket)
-            Peer.Protocol.receive_loop(connected_peer, torrent_info, socket)
+            Peer.Protocol.run_loop(connected_peer, torrent_info, socket)
             Downloader.peer_disconnected(connected_peer.id)
         end
       end)
