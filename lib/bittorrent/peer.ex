@@ -70,24 +70,15 @@ defmodule Bittorrent.Peer do
     end
   end
 
+  # If we are choking we cannot send messages until we tell the peer we are unchoked
   def send_loop(%State{choking: true} = peer, socket) do
     Protocol.send_unchoke(peer, socket)
   end
 
+  # If the peer is choked there is no point sending messages, as they will be discarded
   def send_loop(%State{choked: false} = peer, socket) do
     if request = Bittorrent.Downloader.request_block(peer.pieces) do
-      peer =
-        if peer.interested_in do
-          peer
-        else
-          Protocol.send_interested(peer, socket)
-        end
-
-      if peer.requests_in_flight < @max_requests_in_flight do
-        send_request_and_loop(peer, socket, request)
-      else
-        peer
-      end
+      peer |> ensure_interested(socket) |> ensure_requests_saturated(socket, request)
     else
       Protocol.send_not_interested(peer, socket)
     end
@@ -95,18 +86,18 @@ defmodule Bittorrent.Peer do
 
   def send_loop(peer, _socket), do: peer
 
-  defp send_request_and_loop(peer, socket, request) do
-    case Protocol.send_request(peer, socket, request) do
-      :error ->
-        :error
+  defp ensure_interested(%State{interested_in: true} = peer, _socket), do: peer
 
-      peer ->
-        if peer.requests_in_flight < @max_requests_in_flight do
-          request = Bittorrent.Downloader.request_block(peer.pieces)
-          send_request_and_loop(peer, socket, request)
-        else
-          peer
-        end
-    end
+  defp ensure_interested(%State{interested_in: false} = peer, socket) do
+    Protocol.send_interested(peer, socket)
   end
+
+  defp ensure_requests_saturated(%State{requests_in_flight: reqs} = peer, socket, request)
+       when reqs < @max_requests_in_flight do
+    peer
+    |> Protocol.send_request(socket, request)
+    |> send_loop(socket)
+  end
+
+  defp ensure_requests_saturated(peer_or_error, _socket, _request), do: peer_or_error
 end
