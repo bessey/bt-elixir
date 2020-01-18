@@ -49,14 +49,14 @@ defmodule Bittorrent.PeerDownloader do
 
   defp start_task(state) do
     Task.async(fn ->
-      case Peer.Protocol.connect_to_peer(
+      case Peer.connect(
              state.peer,
              state.info_sha,
              state.peer_id,
              state.pieces_count
            ) do
         {:ok, connected_peer, socket} ->
-          Peer.Protocol.run_loop(connected_peer, socket)
+          Peer.run_loop(connected_peer, socket)
 
         any ->
           any
