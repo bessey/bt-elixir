@@ -11,10 +11,10 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Respect choke / unchoke
 - Respect interested / not interested
 - Save downloaded blocks to disk
+- Smarter connection handling
 
 ## To Do
 
-- Smarter connection pooling
 - Send have / cancel on completion of piece
 - Respond to requests for blocks
 - Listen for incoming connections

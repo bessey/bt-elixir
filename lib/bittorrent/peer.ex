@@ -1,11 +1,14 @@
 defmodule Bittorrent.Peer do
   defmodule State do
     defstruct [
+      # About them
       :name,
       :reserved,
       :info_hash,
       :id,
       :pieces,
+      :ip,
+      :port,
       socket: nil,
       # Their feelings for us
       choked: true,

@@ -15,7 +15,8 @@ defmodule Bittorrent.Torrent do
     uploaded: 0,
     downloaded: 0,
     peers: [],
-    connected_peers: []
+    peer_downloader_pids: [],
+    assigned_peers: []
   ]
 
   alias Bittorrent.Torrent
@@ -40,10 +41,6 @@ defmodule Bittorrent.Torrent do
 
   def left(%Torrent{files: files}) do
     Enum.map(files, & &1.size) |> Enum.sum()
-  end
-
-  def empty_pieces(%Torrent{} = torrent) do
-    List.duplicate(false, length(torrent.pieces))
   end
 
   def bitfield_pieces(bitfield) do
@@ -102,7 +99,14 @@ defmodule Bittorrent.Torrent do
   # First 4 bytes are the IP address and last 2 bytes are the port number.
   # All in network (big endian) notation.
   defp peers_from_binary(binary) do
-    binary |> :binary.bin_to_list() |> Enum.chunk_every(6) |> Enum.map(&peer_from_binary/1)
+    binary
+    |> :binary.bin_to_list()
+    |> Enum.chunk_every(6)
+    |> Enum.map(&peer_from_binary/1)
+    # Shuffle so we can push/pop peers without bias toward first in original list
+    |> Enum.shuffle()
+    # Turn into a queue so we can use it in a FIFO way
+    |> :queue.from_list()
   end
 
   defp peer_from_binary(binary) do

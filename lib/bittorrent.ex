@@ -49,28 +49,11 @@ defmodule Bittorrent do
     {:ok, _process_id} = Downloader.start_link(torrent_info)
     # :sys.trace(process_id, true)
 
-    maintain_connections(10, torrent_info)
+    Downloader.start_peer_downloaders()
+
+    Process.sleep(5 * 60 * 1000)
 
     nil
-  end
-
-  defp maintain_connections(count, torrent_info) do
-    Enum.shuffle(torrent_info.peers)
-    |> Enum.slice(0..(count - 1))
-    |> Enum.map(fn peer ->
-      Task.async(fn ->
-        case Peer.Protocol.connect_to_peer(peer, torrent_info) do
-          {:error, error} ->
-            IO.puts(error)
-
-          {:ok, connected_peer, socket} ->
-            Downloader.peer_connected(connected_peer.id, socket)
-            Peer.Protocol.run_loop(connected_peer, torrent_info, socket)
-            Downloader.peer_disconnected(connected_peer.id)
-        end
-      end)
-    end)
-    |> Enum.map(fn task -> Task.await(task, :infinity) end)
   end
 
   defp info_hash(info) do
