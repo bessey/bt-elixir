@@ -139,7 +139,7 @@ defmodule Bittorrent.Peer.Protocol do
   def send_request(peer, socket, {block, begin, block_size}) do
     puts(
       peer,
-      "Send: request #{block} (#{peer.requests_in_flight + 1} / #{@max_requests_in_flight}"
+      "Send: request #{block} (#{peer.requests_in_flight + 1})"
     )
 
     case :gen_tcp.send(socket, <<

@@ -1,7 +1,7 @@
 defmodule Bittorrent do
   @port 6881
   require Logger
-  alias Bittorrent.{Peer, Torrent, Piece, Downloader}
+  alias Bittorrent.{Torrent, Piece, Downloader}
 
   @moduledoc """
   BitTorrent File Downloader.
