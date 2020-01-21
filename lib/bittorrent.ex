@@ -40,7 +40,7 @@ defmodule Bittorrent do
       output_path: output_path
     }
 
-    IO.puts("Downloading #{Enum.at(torrent_info.files, 0).path} (#{length(pieces)} pieces)")
+    Logger.info("Downloading #{Enum.at(torrent_info.files, 0).path} (#{length(pieces)} pieces)")
 
     torrent_info = Torrent.update_with_tracker_info(torrent_info, @port)
 

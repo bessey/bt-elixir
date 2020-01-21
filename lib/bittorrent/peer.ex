@@ -1,5 +1,6 @@
 defmodule Bittorrent.Peer do
   alias Bittorrent.Peer.Protocol
+  require Logger
 
   defmodule State do
     defstruct [
@@ -31,7 +32,7 @@ defmodule Bittorrent.Peer do
   @max_requests_in_flight 10
 
   def connect({ip, port}, info_sha, peer_id, pieces_count) do
-    IO.puts("Connecting: #{to_string(ip)} #{port}")
+    Logger.info("Connecting: #{to_string(ip)} #{port}")
 
     with {:ok, socket} <-
            :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000),

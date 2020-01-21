@@ -1,6 +1,10 @@
 defmodule Bittorrent.Downloader do
+  @moduledoc """
+  Server in charge of downloading all the Files for a given BitTorrent
+  """
+  require Logger
   use GenServer
-  alias Bittorrent.{Torrent, Piece, Peer, Downloader, PeerDownloader}
+  alias Bittorrent.{Torrent, Piece, PeerDownloader}
 
   @blocks_in_progress_path "_blocks"
   @tmp_extension ".tmp"
@@ -45,7 +49,6 @@ defmodule Bittorrent.Downloader do
   def handle_call({:request_block, peer_pieces}, _from, torrent) do
     requests = Torrent.blocks_we_need_that_peer_has(torrent.pieces, peer_pieces)
     {piece_index, block_index} = requests |> Enum.shuffle() |> List.first()
-    IO.puts("Offering Piece #{piece_index} Block #{block_index}")
     {:reply, Torrent.request_for_block(torrent, piece_index, block_index), torrent}
   end
 
@@ -74,11 +77,11 @@ defmodule Bittorrent.Downloader do
   def handle_cast({:block_downloaded, piece_index, begin, data}, torrent) do
     case Piece.block_for_begin(begin) do
       nil ->
-        IO.puts("Bad block: #{piece_index}")
+        Logger.debug("Bad block: #{piece_index}")
         {:noreply, torrent}
 
       block_index ->
-        IO.puts("Block downloaded: #{piece_index}-#{block_index}")
+        Logger.debug("Block downloaded: #{piece_index}-#{block_index}")
 
         :ok =
           File.write(
@@ -131,7 +134,7 @@ defmodule Bittorrent.Downloader do
 
     {:ok, existing_blocks} = File.ls(blocks_path)
 
-    IO.puts("We already downloaded #{length(existing_blocks)} blocks :)")
+    Logger.info("We already downloaded #{length(existing_blocks)} blocks :)")
 
     existing_blocks
     |> Enum.map(&String.slice(&1, 0..tmp_extension_index))

@@ -1,7 +1,12 @@
 defmodule Bittorrent.Peer.Protocol do
+  @moduledoc """
+  Functions for sending and receiving messages conforming to the BitTorrent Peer Protocol
+  """
+  require Logger
+  alias Bittorrent.{Peer.State, Torrent}
+
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
-  alias Bittorrent.{Peer.State, Torrent}
 
   @msg_choke 0
   @msg_unchoke 1
@@ -16,7 +21,7 @@ defmodule Bittorrent.Peer.Protocol do
   # Receive Protocols
 
   def receive_message(peer, 0, __socket) do
-    puts(peer, "Keep Alive")
+    Logger.debug("Keep Alive")
     peer
   end
 
@@ -26,35 +31,35 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def process_message(peer, @msg_choke, 1, _socket) do
-    puts(peer, "Msg: choke")
+    Logger.debug("Msg: choke")
     %State{peer | choked: true}
   end
 
   def process_message(peer, @msg_unchoke, 1, _socket) do
-    puts(peer, "Msg: unchoke")
+    Logger.debug("Msg: unchoke")
     %State{peer | choked: false}
   end
 
   def process_message(peer, @msg_interested, 1, _socket) do
-    puts(peer, "Msg: interested")
+    Logger.debug("Msg: interested")
     %State{peer | interested: true, choked: false}
   end
 
   def process_message(peer, @msg_not_interested, 1, _socket) do
-    puts(peer, "Msg: not interested")
+    Logger.debug("Msg: not interested")
     %State{peer | interested: false, choked: false}
   end
 
   def process_message(peer, @msg_have, 5 = length, socket) do
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<piece::unsigned-integer-size(32)>>} ->
-        puts(peer, "Msg: have #{piece}")
+        Logger.debug("Msg: have #{piece}")
         %State{State.have_piece(peer, piece) | choked: false}
     end
   end
 
   def process_message(peer, @msg_bitfield, length, socket) do
-    puts(peer, "Msg: bitfield #{length}")
+    Logger.debug("Msg: bitfield #{length}")
 
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
@@ -63,7 +68,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def process_message(peer, @msg_request, 13, _socket) do
-    puts(peer, "Msg: request")
+    Logger.debug("Msg: request")
     peer
   end
 
@@ -75,19 +80,19 @@ defmodule Bittorrent.Peer.Protocol do
          begin::unsigned-integer-size(32),
          data::binary
        >>} ->
-        puts(peer, "Msg: piece #{piece_index}")
+        Logger.debug("Msg: piece #{piece_index}")
         Bittorrent.Downloader.block_downloaded(piece_index, begin, data)
         %State{peer | requests_in_flight: peer.requests_in_flight - 1}
     end
   end
 
   def process_message(peer, @msg_cancel, 13, _socket) do
-    puts(peer, "Msg: cancel")
+    Logger.debug("Msg: cancel")
     peer
   end
 
   def process_message(peer, id, length, _socket) do
-    puts(peer, "Msg: unknown id: #{id}, length: #{length}")
+    Logger.debug("Msg: unknown id: #{id}, length: #{length}")
     raise "Stopping because unknown"
     peer
   end
@@ -110,7 +115,7 @@ defmodule Bittorrent.Peer.Protocol do
              peer_id::binary-size(20)
            >>
          } <- :gen_tcp.recv(socket, base_length + pstr_length) do
-      IO.puts("Connected: #{Base.encode64(peer_id)}")
+      Logger.debug("Connected: #{Base.encode64(peer_id)}")
 
       {:ok,
        %State{
@@ -137,10 +142,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def send_request(peer, socket, {block, begin, block_size}) do
-    puts(
-      peer,
-      "Send: request #{block} (#{peer.requests_in_flight + 1})"
-    )
+    Logger.debug("Send: request #{block} (#{peer.requests_in_flight + 1})")
 
     case :gen_tcp.send(socket, <<
            13::unsigned-integer-size(32),
@@ -158,7 +160,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def send_interested(peer, socket) do
-    puts(peer, "Send: interested")
+    Logger.debug("Send: interested")
 
     case :gen_tcp.send(
            socket,
@@ -173,7 +175,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def send_not_interested(peer, socket) do
-    puts(peer, "Send: not interested")
+    Logger.debug("Send: not interested")
 
     case :gen_tcp.send(
            socket,
@@ -188,7 +190,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def send_unchoke(peer, socket) do
-    puts(peer, "Send: unchoke")
+    Logger.debug("Send: unchoke")
 
     case :gen_tcp.send(
            socket,
@@ -203,7 +205,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   def send_choke(peer, socket) do
-    puts(peer, "Send: choke")
+    Logger.debug("Send: choke")
 
     case :gen_tcp.send(
            socket,
@@ -231,10 +233,6 @@ defmodule Bittorrent.Peer.Protocol do
       # peer_id: 20-byte string used as a unique ID for the client. This is usually the same peer_id that is transmitted in tracker requests (but not always e.g. an anonymity option in Azureus).
       peer_id::binary
     >>
-  end
-
-  defp puts(peer, message) do
-    IO.puts(message <> " [#{Base.encode64(peer.id)}]")
   end
 
   defp empty_pieces(pieces_count) do
