@@ -1,4 +1,8 @@
 defmodule Bittorrent.Piece do
+  @moduledoc """
+  A piece, as defined in the BitTorrent protocol. A torrent is made up of a fixed number of pieces of an equal fixed size.
+  """
+
   @block_size :math.pow(2, 14) |> round
 
   defstruct [:sha, :size, :number, :blocks]

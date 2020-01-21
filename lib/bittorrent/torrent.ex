@@ -1,4 +1,8 @@
 defmodule Bittorrent.Torrent do
+  @moduledoc """
+  A piece, as defined in the BitTorrent protocol. A torrent is made up of a fixed number of pieces of an equal fixed size.
+  """
+
   defstruct [
     # Tracker Info
     :announce,
@@ -19,28 +23,11 @@ defmodule Bittorrent.Torrent do
     assigned_peers: []
   ]
 
-  alias Bittorrent.Torrent
-  use Bitwise, only_operators: true
+  alias Bittorrent.{Torrent, TrackerInfo}
 
   def update_with_tracker_info(%Torrent{} = torrent, port) do
-    params = %{
-      peer_id: torrent.peer_id,
-      port: to_string(port),
-      info_hash: torrent.info_sha,
-      uploaded: torrent.uploaded,
-      downloaded: torrent.downloaded,
-      left: Torrent.left(torrent),
-      compact: "1",
-      no_peer_id: "true",
-      event: "started"
-    }
-
-    response = HTTPoison.get!(torrent.announce, [], params: params).body |> Bento.decode!()
-    %Torrent{torrent | peers: peers_from_binary(response["peers"])}
-  end
-
-  def left(%Torrent{files: files}) do
-    Enum.map(files, & &1.size) |> Enum.sum()
+    info = TrackerInfo.for_torrent(torrent, port)
+    %Torrent{torrent | peers: info.peers}
   end
 
   def bitfield_pieces(bitfield) do
@@ -93,27 +80,5 @@ defmodule Bittorrent.Torrent do
       end)
 
     %Torrent{torrent | pieces: pieces, downloaded: torrent.downloaded + block_size}
-  end
-
-  # The peers value may be a string consisting of multiples of 6 bytes.
-  # First 4 bytes are the IP address and last 2 bytes are the port number.
-  # All in network (big endian) notation.
-  defp peers_from_binary(binary) do
-    binary
-    |> :binary.bin_to_list()
-    |> Enum.chunk_every(6)
-    |> Enum.map(&peer_from_binary/1)
-    # Shuffle so we can push/pop peers without bias toward first in original list
-    |> Enum.shuffle()
-    # Turn into a queue so we can use it in a FIFO way
-    |> :queue.from_list()
-  end
-
-  defp peer_from_binary(binary) do
-    ip = Enum.slice(binary, 0, 4) |> List.to_tuple() |> :inet_parse.ntoa()
-    port_bytes = Enum.slice(binary, 4, 2)
-    port = (Enum.fetch!(port_bytes, 0) <<< 8) + Enum.fetch!(port_bytes, 1)
-
-    {ip, port}
   end
 end
