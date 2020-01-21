@@ -15,6 +15,8 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 
 ## To Do
 
+- Get working as a script using escript
+- Use MapSets of piece indexes for pieces rather than arrays
 - Send have / cancel on completion of piece
 - Respond to requests for blocks
 - Listen for incoming connections

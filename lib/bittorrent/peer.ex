@@ -1,6 +1,7 @@
 defmodule Bittorrent.Peer do
   @moduledoc """
-  The guts of meaningfully communicating with a Peer we are connected to
+  The guts of meaningfully communicating with a Peer we are connected to; leverage the protocol to get a peer
+  to send us the pieces we need.
   """
 
   alias Bittorrent.Peer.Protocol
