@@ -1,4 +1,8 @@
 defmodule Bittorrent.Peer do
+  @moduledoc """
+  The guts of meaningfully communicating with a Peer we are connected to
+  """
+
   alias Bittorrent.Peer.Protocol
   require Logger
 
