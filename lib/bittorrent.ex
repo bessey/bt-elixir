@@ -1,7 +1,7 @@
 defmodule Bittorrent do
   @port 6881
   require Logger
-  alias Bittorrent.{Torrent, Piece, Downloader}
+  alias Bittorrent.{Torrent, TorrentFile, Downloader}
 
   @moduledoc """
   BitTorrent File Downloader.
@@ -13,34 +13,23 @@ defmodule Bittorrent do
   def download(file_path, output_path) do
     prepare_output(output_path)
 
-    torrent = File.read!(file_path) |> Bento.decode!()
+    torrent_file_info = File.read!(file_path) |> TorrentFile.extract_info()
 
     HTTPoison.start()
 
-    piece_size = torrent["info"]["piece length"]
-
-    # Hardcoded for single file mode for now
-    file = %Bittorrent.File{
-      path: torrent["info"]["name"],
-      size: torrent["info"]["length"]
-    }
-
-    pieces =
-      torrent["info"]["pieces"]
-      |> piece_shas_from_binary
-      |> Piece.from_shas(file.size, piece_size)
-
     torrent_info = %Torrent{
-      announce: torrent["announce"],
+      announce: torrent_file_info.announce,
+      info_sha: torrent_file_info.info_hash,
+      files: torrent_file_info.files,
+      pieces: torrent_file_info.pieces,
+      piece_size: torrent_file_info.piece_size,
       peer_id: generate_peer_id(),
-      info_sha: info_hash(torrent["info"]),
-      files: [file],
-      pieces: pieces,
-      piece_size: piece_size,
       output_path: output_path
     }
 
-    Logger.info("Downloading #{Enum.at(torrent_info.files, 0).path} (#{length(pieces)} pieces)")
+    Logger.info(
+      "Downloading #{Enum.at(torrent_info.files, 0).path} (#{length(torrent_info.pieces)} pieces)"
+    )
 
     torrent_info = Torrent.update_with_tracker_info(torrent_info, @port)
 
@@ -56,22 +45,12 @@ defmodule Bittorrent do
     nil
   end
 
-  defp info_hash(info) do
-    bencoded = Bento.encode!(info)
-    :crypto.hash(:sha, bencoded)
-  end
-
   defp generate_peer_id() do
     size = 20
     :crypto.strong_rand_bytes(size) |> Base.url_encode64() |> binary_part(0, size)
   end
 
-  defp piece_shas_from_binary(binary) do
-    binary |> :binary.bin_to_list() |> Enum.chunk_every(20) |> Enum.map(&to_string/1)
-  end
-
   defp prepare_output(output_path) do
-    # File.rm_rf!(output_path)
     File.mkdir_p!(output_path)
     File.mkdir_p!(Path.join([output_path, Downloader.in_progress_path()]))
   end

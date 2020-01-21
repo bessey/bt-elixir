@@ -30,10 +30,6 @@ defmodule Bittorrent.Torrent do
     %Torrent{torrent | peers: info.peers}
   end
 
-  def bitfield_pieces(bitfield) do
-    for <<b::1 <- bitfield>>, into: [], do: if(b == 1, do: true, else: false)
-  end
-
   def size(%Torrent{} = torrent) do
     List.first(torrent.files).size
   end

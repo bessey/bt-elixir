@@ -3,7 +3,7 @@ defmodule Bittorrent.Peer.Protocol do
   Functions for sending and receiving messages conforming to the BitTorrent Peer Protocol
   """
   require Logger
-  alias Bittorrent.{Peer.State, Torrent}
+  alias Bittorrent.{Peer.State}
 
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
@@ -63,7 +63,7 @@ defmodule Bittorrent.Peer.Protocol do
 
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
-        %State{peer | pieces: Torrent.bitfield_pieces(bitfield), choked: false}
+        %State{peer | pieces: bitfield_pieces(bitfield), choked: false}
     end
   end
 
@@ -237,5 +237,9 @@ defmodule Bittorrent.Peer.Protocol do
 
   defp empty_pieces(pieces_count) do
     List.duplicate(false, pieces_count)
+  end
+
+  defp bitfield_pieces(bitfield) do
+    for <<b::1 <- bitfield>>, into: [], do: if(b == 1, do: true, else: false)
   end
 end
