@@ -5,7 +5,7 @@ defmodule Bittorrent.PeerDownloader do
 
   require Logger
   use GenServer
-  alias Bittorrent.{Downloader, Peer}
+  alias Bittorrent.{Client, Peer}
 
   defmodule State do
     defstruct [
@@ -40,7 +40,7 @@ defmodule Bittorrent.PeerDownloader do
   @impl true
   def handle_info({_task, {:error, address, reason}}, state) do
     Logger.debug("PeerDownloader: new connection because error #{reason}")
-    Downloader.return_peer(address)
+    Client.return_peer(address)
     {:noreply, peer_and_task_if_necessary(%State{state | address: nil, task_pid: nil})}
   end
 
@@ -86,7 +86,7 @@ defmodule Bittorrent.PeerDownloader do
   end
 
   defp request_peer() do
-    {:ok, peer} = Downloader.request_peer()
+    {:ok, peer} = Client.request_peer()
     peer
   end
 end

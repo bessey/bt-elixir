@@ -1,7 +1,7 @@
 defmodule Bittorrent do
   @port 6881
   require Logger
-  alias Bittorrent.{Torrent, TorrentFile, Downloader}
+  alias Bittorrent.{Torrent, TorrentFile, Client}
 
   @moduledoc """
   BitTorrent File Downloader.
@@ -33,12 +33,10 @@ defmodule Bittorrent do
 
     torrent_info = Torrent.update_with_tracker_info(torrent_info, @port)
 
-    # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
+    {:ok, client_pid} = Client.start_link(torrent_info)
+    Client.start_peer_downloaders()
 
-    {:ok, downloader_pid} = Downloader.start_link(torrent_info)
-    Downloader.start_peer_downloaders()
-
-    exit_when_process_exits(downloader_pid)
+    exit_when_process_exits(client_pid)
   end
 
   defp generate_peer_id() do
@@ -48,7 +46,7 @@ defmodule Bittorrent do
 
   defp prepare_output(output_path) do
     File.mkdir_p!(output_path)
-    File.mkdir_p!(Path.join([output_path, Downloader.in_progress_path()]))
+    File.mkdir_p!(Path.join([output_path, Client.in_progress_path()]))
   end
 
   defp exit_when_process_exits(pid) do

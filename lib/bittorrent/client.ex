@@ -1,6 +1,6 @@
-defmodule Bittorrent.Downloader do
+defmodule Bittorrent.Client do
   @moduledoc """
-  Server in charge of downloading all the Files for a given BitTorrent
+  Client in charge of downloading / uploading all the Files for a given BitTorrent
   """
   require Logger
   use GenServer

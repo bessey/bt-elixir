@@ -81,7 +81,7 @@ defmodule Bittorrent.Peer.Protocol do
          data::binary
        >>} ->
         Logger.debug("Msg: piece #{piece_index}")
-        Bittorrent.Downloader.block_downloaded(piece_index, begin, data)
+        Bittorrent.Client.block_downloaded(piece_index, begin, data)
         %State{peer | requests_in_flight: peer.requests_in_flight - 1}
     end
   end

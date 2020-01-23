@@ -90,7 +90,7 @@ defmodule Bittorrent.Peer do
 
   # If the peer is choked there is no point sending messages, as they will be discarded
   def send_loop(%State{choked: false} = peer, socket) do
-    if request = Bittorrent.Downloader.request_block(peer.piece_set) do
+    if request = Bittorrent.Client.request_block(peer.piece_set) do
       peer |> ensure_interested(socket) |> ensure_requests_saturated(socket, request)
     else
       Protocol.send_not_interested(peer, socket)
