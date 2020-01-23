@@ -35,14 +35,10 @@ defmodule Bittorrent do
 
     # {:ok, socket} = :gen_tcp.listen(@port, [:binary, packet: 4, active: false, reuseaddr: true])
 
-    {:ok, _process_id} = Downloader.start_link(torrent_info)
-    # :sys.trace(process_id, true)
-
+    {:ok, downloader_pid} = Downloader.start_link(torrent_info)
     Downloader.start_peer_downloaders()
 
-    Process.sleep(5 * 60 * 1000)
-
-    nil
+    exit_when_process_exits(downloader_pid)
   end
 
   defp generate_peer_id() do
@@ -53,5 +49,14 @@ defmodule Bittorrent do
   defp prepare_output(output_path) do
     File.mkdir_p!(output_path)
     File.mkdir_p!(Path.join([output_path, Downloader.in_progress_path()]))
+  end
+
+  defp exit_when_process_exits(pid) do
+    ref = Process.monitor(pid)
+
+    receive do
+      {:DOWN, ^ref, _, _, _} ->
+        IO.puts("Torrent complete!")
+    end
   end
 end
