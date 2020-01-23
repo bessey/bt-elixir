@@ -23,7 +23,7 @@ defmodule Bittorrent.Torrent do
     assigned_peers: []
   ]
 
-  alias Bittorrent.{Torrent, TrackerInfo}
+  alias Bittorrent.{Torrent, TrackerInfo, Piece}
 
   def update_with_tracker_info(%Torrent{} = torrent, port) do
     info = TrackerInfo.for_torrent(torrent, port)
@@ -34,23 +34,21 @@ defmodule Bittorrent.Torrent do
     List.first(torrent.files).size
   end
 
-  def blocks_we_need_that_peer_has(pieces, piece_set) do
-    pieces
-    |> Enum.filter(fn piece -> Enum.at(piece_set, piece.number) end)
-    |> Enum.flat_map(fn piece -> blocks_we_need_in_piece(piece) end)
+  def blocks_we_need_that_peer_has(our_pieces, their_piece_set) do
+    our_pieces
+    |> Enum.filter(fn our_piece -> Enum.at(their_piece_set, our_piece.number) end)
+    |> Enum.flat_map(fn our_piece_they_have -> blocks_we_need_in_piece(our_piece_they_have) end)
   end
 
   defp blocks_we_need_in_piece(piece) do
-    piece.blocks
-    |> Enum.with_index()
-    |> Enum.reject(fn {we_have_block?, _block_index} -> we_have_block? end)
-    |> Enum.map(fn {_we_have_block?, block_index} -> {piece.number, block_index} end)
+    Piece.missing_blocks(piece)
+    |> Enum.map(fn block_index -> {piece.number, block_index} end)
   end
 
   def request_for_block(torrent, piece_index, block_index) do
-    block_size = Bittorrent.Piece.block_size()
+    block_size = Piece.block_size()
     full_size = size(torrent)
-    begin = block_index * Bittorrent.Piece.block_size()
+    begin = block_index * Piece.block_size()
 
     block_size =
       if begin + block_size > full_size do
@@ -66,9 +64,9 @@ defmodule Bittorrent.Torrent do
     pieces =
       Enum.map(torrent.pieces, fn piece ->
         if piece.number == piece_index do
-          %Bittorrent.Piece{
+          %Piece{
             piece
-            | blocks: List.replace_at(piece.blocks, block_index, true)
+            | blocks: MapSet.put(piece.blocks, block_index)
           }
         else
           piece

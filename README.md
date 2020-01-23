@@ -17,12 +17,11 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Respect choke / unchoke
 - Respect interested / not interested
 - Save downloaded blocks to disk
-- Smarter connection handling
-- Get working as a script using escript
+- Dropped / timeout connection recovery
+- Get working as a script
 
 ## To Do
 
-- Use MapSets of piece indexes for pieces rather than arrays
 - Send have / cancel on completion of piece
 - Respond to requests for blocks
 - Listen for incoming connections

@@ -14,9 +14,10 @@ defmodule Bittorrent.Peer do
       :reserved,
       :info_hash,
       :id,
-      :pieces,
       :ip,
       :port,
+      # Assume new peers have nothing until we know otherwise
+      piece_set: MapSet.new(),
       socket: nil,
       # Their feelings for us
       choked: true,
@@ -29,14 +30,13 @@ defmodule Bittorrent.Peer do
     ]
 
     def have_piece(peer, piece) do
-      pieces = List.replace_at(peer.pieces, piece, true)
-      %Bittorrent.Peer.State{peer | pieces: pieces}
+      %Bittorrent.Peer.State{peer | piece_set: MapSet.put(peer.piece_set, piece)}
     end
   end
 
   @max_requests_in_flight 10
 
-  def connect({ip, port}, info_sha, peer_id, pieces_count) do
+  def connect({ip, port}, info_sha, peer_id) do
     Logger.info("Connecting: #{to_string(ip)} #{port}")
 
     with {:ok, socket} <-
@@ -45,7 +45,6 @@ defmodule Bittorrent.Peer do
            Protocol.send_and_receive_handshake(
              info_sha,
              peer_id,
-             pieces_count,
              ip,
              port,
              socket
@@ -83,7 +82,7 @@ defmodule Bittorrent.Peer do
 
   # If the peer is choked there is no point sending messages, as they will be discarded
   def send_loop(%State{choked: false} = peer, socket) do
-    if request = Bittorrent.Downloader.request_block(peer.pieces) do
+    if request = Bittorrent.Downloader.request_block(peer.piece_set) do
       peer |> ensure_interested(socket) |> ensure_requests_saturated(socket, request)
     else
       Protocol.send_not_interested(peer, socket)

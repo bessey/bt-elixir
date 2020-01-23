@@ -5,7 +5,7 @@ defmodule Bittorrent.Piece do
 
   @block_size :math.pow(2, 14) |> round
 
-  defstruct [:sha, :size, :number, :blocks]
+  defstruct [:sha, :size, :number, blocks: MapSet.new()]
 
   def block_size, do: @block_size
 
@@ -14,8 +14,7 @@ defmodule Bittorrent.Piece do
       %Bittorrent.Piece{
         sha: sha,
         number: 1,
-        size: piece_size,
-        blocks: empty_blocks_for_size(piece_size)
+        size: piece_size
       }
     ] ++
       from_shas(rest, torrent_size - piece_size, piece_size, 2)
@@ -27,8 +26,7 @@ defmodule Bittorrent.Piece do
       %Bittorrent.Piece{
         sha: sha,
         number: piece_number,
-        size: piece_size,
-        blocks: empty_blocks_for_size(piece_size)
+        size: piece_size
       }
     ] ++
       from_shas(rest, remaining_size - piece_size, piece_size, piece_number + 1)
@@ -39,18 +37,13 @@ defmodule Bittorrent.Piece do
       %Bittorrent.Piece{
         sha: sha,
         number: piece_number,
-        size: remaining_size,
-        blocks: empty_blocks_for_size(remaining_size)
+        size: remaining_size
       }
     ]
   end
 
   def to_bitfield(pieces) do
-    pieces |> Enum.map(& &1.blocks) |> Enum.map(&Enum.all?/1)
-  end
-
-  def empty_blocks_for_size(size) do
-    List.duplicate(false, ceil(size / @block_size))
+    Enum.map(pieces, &piece_complete?/1)
   end
 
   def block_for_begin(begin) do
@@ -61,5 +54,17 @@ defmodule Bittorrent.Piece do
     else
       round(block)
     end
+  end
+
+  def missing_blocks(piece) do
+    MapSet.new(0..(block_count(piece) - 1)) |> MapSet.difference(piece.blocks)
+  end
+
+  def piece_complete?(piece) do
+    MapSet.size(piece.blocks) == block_count(piece)
+  end
+
+  defp block_count(piece) do
+    ceil(piece.size / @block_size)
   end
 end

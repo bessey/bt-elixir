@@ -151,7 +151,6 @@ defmodule Bittorrent.Downloader do
     pid =
       PeerDownloader.start_link(%PeerDownloader.State{
         info_sha: torrent.info_sha,
-        pieces_count: length(torrent.pieces),
         peer_id: torrent.peer_id,
         peer: peer
       })

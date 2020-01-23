@@ -63,7 +63,7 @@ defmodule Bittorrent.Peer.Protocol do
 
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
-        %State{peer | pieces: bitfield_pieces(bitfield), choked: false}
+        %State{peer | piece_set: bitfield_to_piece_set(bitfield), choked: false}
     end
   end
 
@@ -102,7 +102,7 @@ defmodule Bittorrent.Peer.Protocol do
     msg_id
   end
 
-  def receive_handshake(socket, ip, port, pieces_count) do
+  def receive_handshake(socket, ip, port) do
     base_length = 48
 
     with {:ok, <<pstr_length::unsigned-integer-size(8)>>} <- :gen_tcp.recv(socket, 1),
@@ -124,9 +124,7 @@ defmodule Bittorrent.Peer.Protocol do
          port: port,
          reserved: reserved,
          info_hash: info_hash,
-         id: peer_id,
-         # Assume new peers have nothing until we know otherwise
-         pieces: empty_pieces(pieces_count)
+         id: peer_id
        }}
     else
       error -> error
@@ -135,10 +133,10 @@ defmodule Bittorrent.Peer.Protocol do
 
   # Send Protocols
 
-  def send_and_receive_handshake(info_sha, peer_id, pieces_count, ip, port, socket) do
+  def send_and_receive_handshake(info_sha, peer_id, ip, port, socket) do
     handshake = handshake_message(info_sha, peer_id)
     :ok = :gen_tcp.send(socket, handshake)
-    receive_handshake(socket, ip, port, pieces_count)
+    receive_handshake(socket, ip, port)
   end
 
   def send_request(peer, socket, {block, begin, block_size}) do
@@ -235,11 +233,13 @@ defmodule Bittorrent.Peer.Protocol do
     >>
   end
 
-  defp empty_pieces(pieces_count) do
-    List.duplicate(false, pieces_count)
-  end
-
-  defp bitfield_pieces(bitfield) do
-    for <<b::1 <- bitfield>>, into: [], do: if(b == 1, do: true, else: false)
+  defp bitfield_to_piece_set(bitfield) do
+    for <<b::1 <- bitfield>>, into: [] do
+      if(b == 1, do: true, else: false)
+    end
+    |> Enum.with_index()
+    |> Enum.filter(fn {has_piece, _index} -> has_piece end)
+    |> Enum.map(fn {_has_piece, index} -> index end)
+    |> MapSet.new()
   end
 end

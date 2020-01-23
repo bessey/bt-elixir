@@ -12,7 +12,6 @@ defmodule Bittorrent.PeerDownloader do
       # Torrent Info
       :info_sha,
       :peer_id,
-      :pieces_count,
       # Peer State
       peer: nil,
       task_pid: nil
@@ -57,8 +56,7 @@ defmodule Bittorrent.PeerDownloader do
       case Peer.connect(
              state.peer,
              state.info_sha,
-             state.peer_id,
-             state.pieces_count
+             state.peer_id
            ) do
         {:ok, connected_peer, socket} ->
           Logger.metadata(peer: elem(state.peer, 0))
