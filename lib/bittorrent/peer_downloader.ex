@@ -61,6 +61,7 @@ defmodule Bittorrent.PeerDownloader do
     else
       Logger.debug("PeerDownloader: no peer available, sleeping")
       Process.send_after(self(), :retry_peer_fetch, 30 * 1000)
+      state
     end
   end
 

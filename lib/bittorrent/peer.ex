@@ -33,7 +33,7 @@ defmodule Bittorrent.Peer do
     end
   end
 
-  @max_requests_in_flight 10
+  @max_requests_in_flight 30
   @max_connection_frequency 30
 
   def connect(address, info_sha, peer_id) do
@@ -47,7 +47,7 @@ defmodule Bittorrent.Peer do
            :gen_tcp.connect(
              address.ip,
              address.port,
-             [:binary, packet: :raw, active: false],
+             [:binary, packet: :raw, active: false, nodelay: true],
              3000
            ),
          {:ok, peer} <-
