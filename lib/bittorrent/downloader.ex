@@ -8,7 +8,7 @@ defmodule Bittorrent.Downloader do
 
   @blocks_in_progress_path "_blocks"
   @tmp_extension ".tmp"
-  @max_connections 10
+  @max_connections 100
 
   def in_progress_path(), do: @blocks_in_progress_path
 
@@ -61,9 +61,13 @@ defmodule Bittorrent.Downloader do
 
   @impl true
   def handle_call({:return_peer, peer}, _from, torrent) do
-    peers_with_returned = :queue.in(peer, torrent.peers)
-
     assigned_peers_without_returned = torrent.assigned_peers |> Enum.reject(&(&1 == peer))
+
+    if length(assigned_peers_without_returned) == length(torrent.assigned_peers) do
+      raise "Peer was not in assigned list"
+    end
+
+    peers_with_returned = :queue.in(peer, torrent.peers)
 
     {:reply, :ok,
      %Torrent{
@@ -107,8 +111,10 @@ defmodule Bittorrent.Downloader do
 
   @impl true
   def handle_cast({:start_peer_downloaders}, torrent) do
+    max_conns = min(:queue.len(torrent.peers), @max_connections)
+
     torrent =
-      Enum.reduce(1..@max_connections, torrent, fn _, torrent ->
+      Enum.reduce(1..max_conns, torrent, fn _, torrent ->
         start_peer_downloader(torrent)
       end)
 
@@ -118,14 +124,18 @@ defmodule Bittorrent.Downloader do
   # Utilities
 
   defp handle_request_peer(torrent) do
-    {{_value, assigned_peer}, remaining_peers} = :queue.out(torrent.peers)
+    case :queue.out(torrent.peers) do
+      {{_value, assigned_peer}, remaining_peers} ->
+        {assigned_peer,
+         %Torrent{
+           torrent
+           | assigned_peers: [assigned_peer | torrent.assigned_peers],
+             peers: remaining_peers
+         }}
 
-    {assigned_peer,
-     %Torrent{
-       torrent
-       | assigned_peers: [torrent.assigned_peers | assigned_peer],
-         peers: remaining_peers
-     }}
+      {:empty, _} ->
+        {nil, torrent}
+    end
   end
 
   defp restore_from_progress(torrent) do
@@ -146,15 +156,19 @@ defmodule Bittorrent.Downloader do
   end
 
   defp start_peer_downloader(torrent) do
-    {peer, torrent} = handle_request_peer(torrent)
+    case handle_request_peer(torrent) do
+      {nil, torrent} ->
+        torrent
 
-    pid =
-      PeerDownloader.start_link(%PeerDownloader.State{
-        info_sha: torrent.info_sha,
-        peer_id: torrent.peer_id,
-        peer: peer
-      })
+      {peer, torrent} ->
+        {:ok, pid} =
+          PeerDownloader.start_link(%PeerDownloader.State{
+            info_sha: torrent.info_sha,
+            peer_id: torrent.peer_id,
+            address: peer
+          })
 
-    %Torrent{torrent | peer_downloader_pids: [torrent.peer_downloader_pids | pid]}
+        %Torrent{torrent | peer_downloader_pids: [pid | torrent.peer_downloader_pids]}
+    end
   end
 end
