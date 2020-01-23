@@ -18,7 +18,7 @@ defmodule Bittorrent.Torrent do
     # Live stats,
     uploaded: 0,
     downloaded: 0,
-    peers: [],
+    peers: :queue.new(),
     peer_downloader_pids: [],
     assigned_peers: []
   ]

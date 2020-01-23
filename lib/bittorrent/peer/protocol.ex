@@ -102,7 +102,7 @@ defmodule Bittorrent.Peer.Protocol do
     msg_id
   end
 
-  def receive_handshake(socket, ip, port) do
+  def receive_handshake(socket, address) do
     base_length = 48
 
     with {:ok, <<pstr_length::unsigned-integer-size(8)>>} <- :gen_tcp.recv(socket, 1),
@@ -120,8 +120,7 @@ defmodule Bittorrent.Peer.Protocol do
       {:ok,
        %State{
          name: to_string(pstr),
-         ip: ip,
-         port: port,
+         address: address,
          reserved: reserved,
          info_hash: info_hash,
          id: peer_id
@@ -133,10 +132,10 @@ defmodule Bittorrent.Peer.Protocol do
 
   # Send Protocols
 
-  def send_and_receive_handshake(info_sha, peer_id, ip, port, socket) do
+  def send_and_receive_handshake(info_sha, peer_id, address, socket) do
     handshake = handshake_message(info_sha, peer_id)
     :ok = :gen_tcp.send(socket, handshake)
-    receive_handshake(socket, ip, port)
+    receive_handshake(socket, address)
   end
 
   def send_request(peer, socket, {block, begin, block_size}) do

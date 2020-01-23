@@ -26,8 +26,8 @@ defmodule Bittorrent.Downloader do
     GenServer.call(:downloader, {:request_peer})
   end
 
-  def return_peer(peer_id) do
-    GenServer.call(:downloader, {:return_peer, peer_id})
+  def return_peer(address) do
+    GenServer.call(:downloader, {:return_peer, address})
   end
 
   def block_downloaded(piece_index, begin, data) do
@@ -60,14 +60,15 @@ defmodule Bittorrent.Downloader do
   end
 
   @impl true
-  def handle_call({:return_peer, peer}, _from, torrent) do
-    assigned_peers_without_returned = torrent.assigned_peers |> Enum.reject(&(&1 == peer))
+  def handle_call({:return_peer, address}, _from, torrent) do
+    assigned_peers_without_returned =
+      torrent.assigned_peers |> Enum.reject(&(&1.ip == address.ip && &1.port == address.port))
 
     if length(assigned_peers_without_returned) == length(torrent.assigned_peers) do
       raise "Peer was not in assigned list"
     end
 
-    peers_with_returned = :queue.in(peer, torrent.peers)
+    peers_with_returned = :queue.in(address, torrent.peers)
 
     {:reply, :ok,
      %Torrent{

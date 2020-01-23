@@ -4,7 +4,7 @@ defmodule Bittorrent.Peer do
   to send us the pieces we need.
   """
 
-  alias Bittorrent.Peer.Protocol
+  alias Bittorrent.Peer.{Protocol, Address}
   require Logger
 
   defmodule State do
@@ -14,8 +14,7 @@ defmodule Bittorrent.Peer do
       :reserved,
       :info_hash,
       :id,
-      :ip,
-      :port,
+      :address,
       # Assume new peers have nothing until we know otherwise
       piece_set: MapSet.new(),
       socket: nil,
@@ -35,21 +34,30 @@ defmodule Bittorrent.Peer do
   end
 
   @max_requests_in_flight 10
+  @max_connection_frequency 30
 
-  def connect({ip, port}, info_sha, peer_id) do
-    Logger.info("Connecting: #{to_string(ip)} #{port}")
+  def connect(address, info_sha, peer_id) do
+    Logger.info(
+      "Connecting: #{to_string(address.ip)} #{address.port} #{address.last_connected_at}"
+    )
+
+    sleep_if_connected_recently(address.last_connected_at)
 
     with {:ok, socket} <-
-           :gen_tcp.connect(ip, port, [:binary, packet: :raw, active: false], 3000),
+           :gen_tcp.connect(
+             address.ip,
+             address.port,
+             [:binary, packet: :raw, active: false],
+             3000
+           ),
          {:ok, peer} <-
            Protocol.send_and_receive_handshake(
              info_sha,
              peer_id,
-             ip,
-             port,
+             address,
              socket
            ) do
-      {:ok, peer, socket}
+      {:ok, %State{peer | address: Address.just_connected(peer.address)}, socket}
     else
       error -> error
     end
@@ -105,4 +113,19 @@ defmodule Bittorrent.Peer do
   end
 
   defp ensure_requests_saturated(peer_or_error, _socket, _request), do: peer_or_error
+
+  defp sleep_if_connected_recently(nil), do: nil
+
+  defp sleep_if_connected_recently(connected_at) do
+    now = DateTime.utc_now()
+    seconds_since_connection = DateTime.diff(now, connected_at, :second)
+
+    unless(seconds_since_connection > @max_connection_frequency) do
+      sleep_for =
+        round(@max_connection_frequency - seconds_since_connection + :random.uniform() * 10)
+
+      Logger.debug("Connected Too Recently: sleeping for #{sleep_for} seconds")
+      Process.sleep(sleep_for * 1000)
+    end
+  end
 end

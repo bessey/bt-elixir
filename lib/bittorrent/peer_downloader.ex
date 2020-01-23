@@ -32,16 +32,21 @@ defmodule Bittorrent.PeerDownloader do
   end
 
   @impl true
-  def handle_info({_task, {:ok, _result}}, state) do
+  def handle_info({_task, {:ok, _address}}, state) do
     Logger.debug("PeerDownloader: new connection")
     {:noreply, peer_and_task_if_necessary(%State{state | address: nil, task_pid: nil})}
   end
 
   @impl true
-  def handle_info({_task, {:error, reason}}, state) do
+  def handle_info({_task, {:error, address, reason}}, state) do
     Logger.debug("PeerDownloader: new connection because error #{reason}")
-    Downloader.return_peer(state.address)
+    Downloader.return_peer(address)
     {:noreply, peer_and_task_if_necessary(%State{state | address: nil, task_pid: nil})}
+  end
+
+  @impl true
+  def handle_info({_task, :retry_peer_fetch}, state) do
+    {:noreply, peer_and_task_if_necessary(state)}
   end
 
   @impl true
@@ -49,24 +54,32 @@ defmodule Bittorrent.PeerDownloader do
 
   defp peer_and_task_if_necessary(state) do
     address = state.address || request_peer()
-    state = %State{state | address: address}
-    %State{state | task_pid: state.task_pid || start_task(state)}
+
+    if address do
+      state = %State{state | address: address}
+      %State{state | task_pid: state.task_pid || start_task(state)}
+    else
+      Logger.debug("PeerDownloader: no peer available, sleeping")
+      Process.send_after(self(), :retry_peer_fetch, 30 * 1000)
+    end
   end
 
   defp start_task(state) do
     Task.async(fn ->
+      Logger.metadata(peer: state.address.ip)
+      Logger.metadata(info_sha: Base.encode64(state.info_sha))
+
       case Peer.connect(
              state.address,
              state.info_sha,
              state.peer_id
            ) do
         {:ok, connected_peer, socket} ->
-          Logger.metadata(peer: elem(state.address, 0))
-          Logger.metadata(info_sha: Base.encode64(state.info_sha))
           Peer.run_loop(connected_peer, socket)
+          {:ok, connected_peer.address}
 
-        any ->
-          any
+        {:error, reason} ->
+          {:error, Peer.Address.just_connected(state.address), reason}
       end
     end)
   end

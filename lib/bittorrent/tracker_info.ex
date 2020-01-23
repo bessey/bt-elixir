@@ -3,7 +3,7 @@ defmodule Bittorrent.TrackerInfo do
   Capture data returned from tracker for a given torrent
   """
 
-  alias Bittorrent.Torrent
+  alias Bittorrent.{Torrent, Peer.Address}
   use Bitwise, only_operators: true
 
   defstruct [:announce, :peers]
@@ -52,6 +52,6 @@ defmodule Bittorrent.TrackerInfo do
     port_bytes = Enum.slice(binary, 4, 2)
     port = (Enum.fetch!(port_bytes, 0) <<< 8) + Enum.fetch!(port_bytes, 1)
 
-    {ip, port}
+    %Address{ip: ip, port: port, last_connected_at: nil}
   end
 end
