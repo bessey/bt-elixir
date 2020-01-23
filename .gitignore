@@ -25,3 +25,6 @@ bittorrent-*.tar
 test/output
 
 /.elixir_ls
+
+# Dont version a whole Elixir binary
+/bittorrent

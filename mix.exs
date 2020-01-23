@@ -7,7 +7,8 @@ defmodule Bittorrent.MixProject do
       version: "0.1.0",
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      escript: escript()
     ]
   end
 
@@ -25,5 +26,9 @@ defmodule Bittorrent.MixProject do
       {:castore, "~> 0.1.0"},
       {:httpoison, "~> 1.6"}
     ]
+  end
+
+  defp escript do
+    [main_module: Bittorrent.CLI]
   end
 end

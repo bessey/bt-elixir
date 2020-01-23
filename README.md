@@ -2,6 +2,12 @@
 
 A work in progress implementation of the [BitTorrent Specification](https://wiki.theory.org/index.php/BitTorrentSpecification#Info_Dictionary) as a method to learn Elixir.
 
+## Usage
+```sh
+> mix escript.build
+> ./bittorrent --path ./my.torrent --output ./my_torrents/
+```
+
 ## Working
 
 - Parse a tracker file and use it to request peers from the tracker
@@ -12,10 +18,10 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Respect interested / not interested
 - Save downloaded blocks to disk
 - Smarter connection handling
+- Get working as a script using escript
 
 ## To Do
 
-- Get working as a script using escript
 - Use MapSets of piece indexes for pieces rather than arrays
 - Send have / cancel on completion of piece
 - Respond to requests for blocks
