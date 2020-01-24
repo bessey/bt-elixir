@@ -33,7 +33,7 @@ defmodule Bittorrent.Peer do
     end
   end
 
-  @max_requests_in_flight 30
+  @max_requests_in_flight 10
   @max_connection_frequency 30
 
   def connect(address, info_sha, peer_id) do
@@ -63,8 +63,12 @@ defmodule Bittorrent.Peer do
     end
   end
 
-  def run_loop(peer, socket) do
-    :gen_tcp.recv(socket, 4) |> handle_run_loop_receive(peer, socket)
+  def run_loop(peer, socket, timeout \\ :infinity) do
+    :gen_tcp.recv(socket, 4, timeout) |> handle_run_loop_receive(peer, socket)
+  end
+
+  defp handle_run_loop_receive({:error, :timeout}, peer, _socket) do
+    peer
   end
 
   defp handle_run_loop_receive({:error, value}, _peer, _socket) do
@@ -74,6 +78,7 @@ defmodule Bittorrent.Peer do
   defp handle_run_loop_receive({:ok, <<msg_length::unsigned-integer-size(32)>>}, peer, socket) do
     case peer
          |> Protocol.receive_message(msg_length, socket)
+         |> run_loop(socket, 0)
          |> send_loop(socket) do
       :error ->
         {:error, nil}
