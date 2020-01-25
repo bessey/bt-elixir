@@ -1,6 +1,6 @@
 # Bittorrent
 
-A work in progress implementation of the [BitTorrent Specification](https://wiki.theory.org/index.php/BitTorrentSpecification#Info_Dictionary) as a method to learn Elixir.
+A work in progress implementation of the [BitTorrent Specification](https://wiki.theory.org/index.php/BitTorrentSpecification#Info_Dictionary) as a method to learn Elixir. Inspired by [Building a BitTorrent client from the ground up in Go](https://blog.jse.li/posts/torrent/).
 
 ## Usage
 ```sh
@@ -22,11 +22,18 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 
 ## To Do
 
-- Send bitfield message on connection
-- Send have / cancel on completion of piece
-- Respond to requests for blocks
 - Listen for incoming connections
+- Send bitfield message on connection
+- Respond to requests for blocks (actually seed!)
+- Send have / cancel on completion of piece
 - Web UI
+
+## Architecture
+The supervision tree is architected as follows:
+`Bittorrent` supervises one
+`Bittorrent.Client`, in charge of downloading the contents of a given .torrent file. It supervises N
+`Bittorrent.PeerDownloader`, who each are responsible for fetching an available peer from the `Client`. They each supervise a single
+`Task.Async`, which runs the TCP socket loop between themselves and the peer, fetching available blocks from the `Client` and reporting fetched blocks back to it.
 
 ## Installation
 
