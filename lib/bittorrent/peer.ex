@@ -64,11 +64,7 @@ defmodule Bittorrent.Peer do
   end
 
   def run_loop(peer, socket, timeout \\ :infinity) do
-    :gen_tcp.recv(socket, 4, timeout) |> handle_run_loop_receive(peer, socket)
-  end
-
-  defp handle_run_loop_receive({:error, :timeout}, peer, _socket) do
-    peer
+    Protocol.receive_message_length(socket, timeout) |> handle_run_loop_receive(peer, socket)
   end
 
   defp handle_run_loop_receive({:error, value}, _peer, _socket) do
@@ -76,15 +72,12 @@ defmodule Bittorrent.Peer do
   end
 
   defp handle_run_loop_receive({:ok, <<msg_length::unsigned-integer-size(32)>>}, peer, socket) do
-    case peer
-         |> Protocol.receive_message(msg_length, socket)
-         |> run_loop(socket, 0)
-         |> send_loop(socket) do
-      :error ->
-        {:error, nil}
-
-      peer ->
-        run_loop(peer, socket)
+    with {:ok, peer} <- Protocol.receive_message(peer, msg_length, socket),
+         {:ok, peer} <- run_loop(peer, socket, 0),
+         {:ok, peer} <- send_loop(peer, socket), do: run_loop(peer, socket)
+    else
+      {:error, value} ->
+        {:error, value}
     end
   end
 

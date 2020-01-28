@@ -20,7 +20,10 @@ defmodule Bittorrent.Peer.Protocol do
 
   # Receive Protocols
 
-  def receive_message(peer, 0, __socket) do
+  def receive_message_length(socket, timeout \\ :infinity) do
+    :gen_tcp.recv(socket, 4, timeout)
+  end
+
     Logger.debug("Keep Alive")
     peer
   end
