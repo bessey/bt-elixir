@@ -76,8 +76,8 @@ defmodule Bittorrent.PeerDownloader do
              state.peer_id
            ) do
         {:ok, connected_peer, socket} ->
-          Peer.run_loop(connected_peer, socket)
-          {:ok, connected_peer.address}
+          {:error, reason} = Peer.run_loop(connected_peer, socket)
+          {:error, connected_peer.address, reason}
 
         {:error, reason} ->
           {:error, Peer.Address.just_connected(state.address), reason}

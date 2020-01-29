@@ -17,7 +17,6 @@ defmodule Bittorrent.Peer do
       :address,
       # Assume new peers have nothing until we know otherwise
       piece_set: MapSet.new(),
-      socket: nil,
       # Their feelings for us
       choked: true,
       interested: false,
@@ -64,40 +63,53 @@ defmodule Bittorrent.Peer do
   end
 
   def run_loop(peer, socket, timeout \\ :infinity) do
-    Protocol.receive_message_length(socket, timeout) |> handle_run_loop_receive(peer, socket)
-  end
-
-  defp handle_run_loop_receive({:error, value}, _peer, _socket) do
-    {:error, value}
-  end
-
-  defp handle_run_loop_receive({:ok, <<msg_length::unsigned-integer-size(32)>>}, peer, socket) do
-    with {:ok, peer} <- Protocol.receive_message(peer, msg_length, socket),
-         {:ok, peer} <- run_loop(peer, socket, 0),
-         {:ok, peer} <- send_loop(peer, socket), do: run_loop(peer, socket)
+    with {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
+         {:ok, peer} <- receive_until_buffer_empty(peer, socket),
+         {:ok, peer} <- request_until_pipeline_full(peer, socket) do
+      run_loop(peer, socket)
     else
-      {:error, value} ->
-        {:error, value}
+      error -> error
+    end
+  end
+
+  defp receive_until_buffer_empty(peer, socket) do
+    case Protocol.receive_message(peer, socket, 0) do
+      {:ok, peer} ->
+        receive_until_buffer_empty(peer, socket)
+
+      {:error, :timeout} ->
+        {:ok, peer}
+
+      error ->
+        error
     end
   end
 
   # If we are choking we cannot send messages until we tell the peer we are unchoked
-  def send_loop(%State{choking: true} = peer, socket) do
+  defp request_until_pipeline_full(%State{choking: true} = peer, socket) do
     Protocol.send_unchoke(peer, socket)
   end
 
   # If the peer is choked there is no point sending messages, as they will be discarded
-  def send_loop(%State{choked: false} = peer, socket) do
-    if request = Bittorrent.Client.request_block(peer.piece_set) do
-      peer |> ensure_interested(socket) |> ensure_requests_saturated(socket, request)
-    else
-      Protocol.send_not_interested(peer, socket)
+  defp request_until_pipeline_full(%State{choked: false} = peer, socket) do
+    case Bittorrent.Client.request_block(peer.piece_set) do
+      nil ->
+        Protocol.send_not_interested(peer, socket)
+
+      request ->
+        case ensure_interested(peer, socket) do
+          {:ok, peer} ->
+            ensure_requests_saturated(peer, socket, request)
+
+          error ->
+            error
+        end
     end
   end
 
-  def send_loop(peer, _socket), do: peer
+  defp request_until_pipeline_full(%State{} = peer, _socket), do: {:ok, peer}
 
-  defp ensure_interested(%State{interested_in: true} = peer, _socket), do: peer
+  defp ensure_interested(%State{interested_in: true} = peer, _socket), do: {:ok, peer}
 
   defp ensure_interested(%State{interested_in: false} = peer, socket) do
     Protocol.send_interested(peer, socket)
@@ -105,12 +117,16 @@ defmodule Bittorrent.Peer do
 
   defp ensure_requests_saturated(%State{requests_in_flight: reqs} = peer, socket, request)
        when reqs < @max_requests_in_flight do
-    peer
-    |> Protocol.send_request(socket, request)
-    |> send_loop(socket)
+    case Protocol.send_request(peer, socket, request) do
+      {:ok, peer} ->
+        request_until_pipeline_full(peer, socket)
+
+      error ->
+        error
+    end
   end
 
-  defp ensure_requests_saturated(peer_or_error, _socket, _request), do: peer_or_error
+  defp ensure_requests_saturated(peer, _socket, _request), do: {:ok, peer}
 
   defp sleep_if_connected_recently(nil), do: nil
 

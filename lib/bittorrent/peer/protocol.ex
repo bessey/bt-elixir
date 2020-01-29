@@ -20,62 +20,92 @@ defmodule Bittorrent.Peer.Protocol do
 
   # Receive Protocols
 
-  def receive_message_length(socket, timeout \\ :infinity) do
-    :gen_tcp.recv(socket, 4, timeout)
-  end
+  def receive_message(peer, socket, timeout \\ :infinity)
 
-    Logger.debug("Keep Alive")
-    peer
-  end
+  def receive_message(peer, socket, timeout) do
+    case receive_message_length(socket, timeout) do
+      {:ok, message_length} ->
+        receive_message_body(peer, message_length, socket)
 
-  def receive_message(peer, length, socket) do
-    id = receive_message_id(socket)
-    process_message(peer, id, length, socket)
-  end
-
-  def process_message(peer, @msg_choke, 1, _socket) do
-    Logger.debug("Msg: choke")
-    %State{peer | choked: true}
-  end
-
-  def process_message(peer, @msg_unchoke, 1, _socket) do
-    Logger.debug("Msg: unchoke")
-    %State{peer | choked: false}
-  end
-
-  def process_message(peer, @msg_interested, 1, _socket) do
-    Logger.debug("Msg: interested")
-    %State{peer | interested: true, choked: false}
-  end
-
-  def process_message(peer, @msg_not_interested, 1, _socket) do
-    Logger.debug("Msg: not interested")
-    %State{peer | interested: false, choked: false}
-  end
-
-  def process_message(peer, @msg_have, 5 = length, socket) do
-    case :gen_tcp.recv(socket, length - 1) do
-      {:ok, <<piece::unsigned-integer-size(32)>>} ->
-        Logger.debug("Msg: have #{piece}")
-        %State{State.have_piece(peer, piece) | choked: false}
+      {:error, _} = error ->
+        error
     end
   end
 
-  def process_message(peer, @msg_bitfield, length, socket) do
+  defp receive_message_length(socket, timeout) do
+    case :gen_tcp.recv(socket, 4, timeout) do
+      {:ok, <<msg_length::unsigned-integer-size(32)>>} ->
+        {:ok, msg_length}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp receive_message_body(peer, 0, __socket) do
+    Logger.debug("Keep Alive")
+    {:ok, peer}
+  end
+
+  defp receive_message_body(peer, length, socket) do
+    case receive_message_id(socket) do
+      {:ok, id} ->
+        process_message(peer, id, length, socket)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp process_message(peer, @msg_choke, 1, _socket) do
+    Logger.debug("Msg: choke")
+    {:ok, %State{peer | choked: true}}
+  end
+
+  defp process_message(peer, @msg_unchoke, 1, _socket) do
+    Logger.debug("Msg: unchoke")
+    {:ok, %State{peer | choked: false}}
+  end
+
+  defp process_message(peer, @msg_interested, 1, _socket) do
+    Logger.debug("Msg: interested")
+    {:ok, %State{peer | interested: true, choked: false}}
+  end
+
+  defp process_message(peer, @msg_not_interested, 1, _socket) do
+    Logger.debug("Msg: not interested")
+    {:ok, %State{peer | interested: false, choked: false}}
+  end
+
+  defp process_message(peer, @msg_have, 5 = length, socket) do
+    case :gen_tcp.recv(socket, length - 1) do
+      {:ok, <<piece::unsigned-integer-size(32)>>} ->
+        Logger.debug("Msg: have #{piece}")
+        {:ok, %State{State.have_piece(peer, piece) | choked: false}}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp process_message(peer, @msg_bitfield, length, socket) do
     Logger.debug("Msg: bitfield #{length}")
 
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
-        %State{peer | piece_set: bitfield_to_piece_set(bitfield), choked: false}
+        {:ok, %State{peer | piece_set: bitfield_to_piece_set(bitfield), choked: false}}
+
+      {:error, _} = error ->
+        error
     end
   end
 
-  def process_message(peer, @msg_request, 13, _socket) do
+  defp process_message(peer, @msg_request, 13, _socket) do
     Logger.debug("Msg: request")
-    peer
+    {:ok, peer}
   end
 
-  def process_message(peer, @msg_piece, length, socket) do
+  defp process_message(peer, @msg_piece, length, socket) do
     case :gen_tcp.recv(socket, length - 1) do
       {:ok,
        <<
@@ -85,27 +115,35 @@ defmodule Bittorrent.Peer.Protocol do
        >>} ->
         Logger.debug("Msg: piece #{piece_index}")
         Bittorrent.Client.block_downloaded(piece_index, begin, data)
-        %State{peer | requests_in_flight: peer.requests_in_flight - 1}
+        {:ok, %State{peer | requests_in_flight: peer.requests_in_flight - 1}}
+
+      {:error, _} = error ->
+        error
     end
   end
 
-  def process_message(peer, @msg_cancel, 13, _socket) do
+  defp process_message(peer, @msg_cancel, 13, _socket) do
     Logger.debug("Msg: cancel")
-    peer
+    {:ok, peer}
   end
 
-  def process_message(peer, id, length, _socket) do
+  defp process_message(peer, id, length, _socket) do
     Logger.debug("Msg: unknown id: #{id}, length: #{length}")
     raise "Stopping because unknown"
-    peer
+    {:ok, peer}
   end
 
   defp receive_message_id(socket) do
-    {:ok, <<msg_id::unsigned-integer-size(8)>>} = :gen_tcp.recv(socket, 1)
-    msg_id
+    case :gen_tcp.recv(socket, 1) do
+      {:ok, <<msg_id::unsigned-integer-size(8)>>} ->
+        {:ok, msg_id}
+
+      {:error, _} = error ->
+        error
+    end
   end
 
-  def receive_handshake(socket, address) do
+  defp receive_handshake(socket, address) do
     base_length = 48
 
     with {:ok, <<pstr_length::unsigned-integer-size(8)>>} <- :gen_tcp.recv(socket, 1),
@@ -129,7 +167,8 @@ defmodule Bittorrent.Peer.Protocol do
          id: peer_id
        }}
     else
-      error -> error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -137,8 +176,14 @@ defmodule Bittorrent.Peer.Protocol do
 
   def send_and_receive_handshake(info_sha, peer_id, address, socket) do
     handshake = handshake_message(info_sha, peer_id)
-    :ok = :gen_tcp.send(socket, handshake)
-    receive_handshake(socket, address)
+
+    with :ok <- :gen_tcp.send(socket, handshake),
+         {:ok, peer} <- receive_handshake(socket, address) do
+      {:ok, peer}
+    else
+      {:error, _} = error ->
+        error
+    end
   end
 
   def send_request(peer, socket, {block, begin, block_size}) do
@@ -152,10 +197,10 @@ defmodule Bittorrent.Peer.Protocol do
            block_size::unsigned-integer-size(32)
          >>) do
       :ok ->
-        %State{peer | requests_in_flight: peer.requests_in_flight + 1}
+        {:ok, %State{peer | requests_in_flight: peer.requests_in_flight + 1}}
 
-      {:error, _} ->
-        :error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -167,10 +212,10 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_interested::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        %State{peer | interested_in: true}
+        {:ok, %State{peer | interested_in: true}}
 
-      {:error, _} ->
-        :error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -182,10 +227,10 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_not_interested::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        %State{peer | interested_in: false}
+        {:ok, %State{peer | interested_in: false}}
 
-      {:error, _} ->
-        :error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -197,10 +242,10 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_unchoke::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        %State{peer | choking: false}
+        {:ok, %State{peer | choking: false}}
 
-      {:error, _} ->
-        :error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -212,15 +257,15 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_choke::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        %State{peer | choking: true}
+        {:ok, %State{peer | choking: true}}
 
-      {:error, _} ->
-        :error
+      {:error, _} = error ->
+        error
     end
   end
 
   # handshake: <pstrlen><pstr><reserved><info_hash><peer_id>
-  def handshake_message(info_hash, peer_id) do
+  defp handshake_message(info_hash, peer_id) do
     <<
       # pstrlen: string length of <pstr>, as a single raw byte
       @pstrlen,
