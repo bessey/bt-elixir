@@ -7,3 +7,5 @@ config :logger, :console,
     :peer
   ],
   level: :debug
+
+config :tesla, adapter: Tesla.Adapter.Hackney

@@ -21,7 +21,7 @@ defmodule Bittorrent.TrackerInfo do
       event: "started"
     }
 
-    response = HTTPoison.get!(torrent.announce, [], params: params).body |> Bento.decode!()
+    response = Tesla.get!(torrent.announce, query: params).body |> Bento.decode!()
 
     %Bittorrent.TrackerInfo{
       announce: torrent.announce,

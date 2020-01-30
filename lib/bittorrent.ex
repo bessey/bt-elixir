@@ -15,8 +15,6 @@ defmodule Bittorrent do
 
     torrent_file_info = File.read!(file_path) |> TorrentFile.extract_info()
 
-    HTTPoison.start()
-
     torrent_info = %Torrent{
       announce: torrent_file_info.announce,
       info_sha: torrent_file_info.info_hash,

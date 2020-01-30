@@ -24,7 +24,8 @@ defmodule Bittorrent.MixProject do
     [
       {:bento, "~> 0.9"},
       {:castore, "~> 0.1.0"},
-      {:httpoison, "~> 1.6"}
+      {:tesla, "~> 1.3.0"},
+      {:hackney, "~> 1.15.2"}
     ]
   end
 
