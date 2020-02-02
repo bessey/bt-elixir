@@ -4,7 +4,7 @@ defmodule Bittorrent.Client do
   """
   require Logger
   use GenServer
-  alias Bittorrent.{Torrent, Piece, PeerDownloader}
+  alias Bittorrent.{Torrent, PeerDownloader, Peer}
 
   @blocks_in_progress_path "_blocks"
   @tmp_extension ".tmp"
@@ -18,8 +18,8 @@ defmodule Bittorrent.Client do
     GenServer.start_link(__MODULE__, torrent, name: :downloader)
   end
 
-  def request_block(peer_pieces) do
-    GenServer.call(:downloader, {:request_block, peer_pieces})
+  def request_piece(peer_pieces) do
+    GenServer.call(:downloader, {:request_piece, peer_pieces})
   end
 
   def request_peer() do
@@ -30,8 +30,8 @@ defmodule Bittorrent.Client do
     GenServer.call(:downloader, {:return_peer, address})
   end
 
-  def block_downloaded(piece_index, begin, data) do
-    GenServer.cast(:downloader, {:block_downloaded, piece_index, begin, data})
+  def piece_downloaded(piece_index, data) do
+    GenServer.cast(:downloader, {:piece_downloaded, piece_index, data})
   end
 
   def start_peer_downloaders() do
@@ -46,10 +46,11 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
-  def handle_call({:request_block, peer_pieces}, _from, torrent) do
-    requests = Torrent.blocks_we_need_that_peer_has(torrent.pieces, peer_pieces)
-    {piece_index, block_index} = requests |> Enum.shuffle() |> List.first()
-    {:reply, Torrent.request_for_block(torrent, piece_index, block_index), torrent}
+  def handle_call({:request_piece, %Peer.State{} = peer}, _from, torrent) do
+    pieces = Torrent.pieces_we_need_that_peer_has(torrent, peer.pieces)
+    piece = pieces |> Enum.shuffle() |> List.first()
+
+    {:reply, piece, torrent}
   end
 
   @impl true
@@ -61,53 +62,37 @@ defmodule Bittorrent.Client do
 
   @impl true
   def handle_call({:return_peer, address}, _from, torrent) do
-    assigned_peers_without_returned =
-      torrent.assigned_peers |> Enum.reject(&(&1.ip == address.ip && &1.port == address.port))
-
-    if length(assigned_peers_without_returned) == length(torrent.assigned_peers) do
-      raise "Peer was not in assigned list"
-    end
-
     peers_with_returned = :queue.in(address, torrent.peers)
 
     {:reply, :ok,
      %Torrent{
        torrent
-       | assigned_peers: assigned_peers_without_returned,
-         peers: peers_with_returned
+       | peers: peers_with_returned
      }}
   end
 
   @impl true
-  def handle_cast({:block_downloaded, piece_index, begin, data}, torrent) do
-    case Piece.block_for_begin(begin) do
-      nil ->
-        Logger.debug("Bad block: #{piece_index}")
-        {:noreply, torrent}
+  def handle_cast({:piece_downloaded, piece_index, data}, torrent) do
+    Logger.debug("Piece downloaded: #{piece_index}")
 
-      block_index ->
-        Logger.debug("Block downloaded: #{piece_index}-#{block_index}")
+    :ok =
+      File.write(
+        Path.join([
+          torrent.output_path,
+          @blocks_in_progress_path,
+          "#{piece_index}#{@tmp_extension}"
+        ]),
+        data
+      )
 
-        :ok =
-          File.write(
-            Path.join([
-              torrent.output_path,
-              @blocks_in_progress_path,
-              "#{piece_index}-#{block_index}#{@tmp_extension}"
-            ]),
-            data
-          )
+    piece_size = byte_size(data)
 
-        block_size = byte_size(data)
-
-        {:noreply,
-         Torrent.update_with_block_downloaded(
-           torrent,
-           piece_index,
-           block_index,
-           block_size
-         )}
-    end
+    {:noreply,
+     Torrent.update_with_piece_downloaded(
+       torrent,
+       piece_index,
+       piece_size
+     )}
   end
 
   @impl true
@@ -130,8 +115,7 @@ defmodule Bittorrent.Client do
         {assigned_peer,
          %Torrent{
            torrent
-           | assigned_peers: [assigned_peer | torrent.assigned_peers],
-             peers: remaining_peers
+           | peers: remaining_peers
          }}
 
       {:empty, _} ->
@@ -149,10 +133,10 @@ defmodule Bittorrent.Client do
 
     existing_blocks
     |> Enum.map(&String.slice(&1, 0..tmp_extension_index))
-    |> Enum.map(fn string -> String.split(string, "-") |> Enum.map(&String.to_integer/1) end)
-    |> Enum.reduce(torrent, fn [piece_index, block_index], torrent ->
+    |> Enum.map(&String.to_integer/1)
+    |> Enum.reduce(torrent, fn piece_index, torrent ->
       # TODO read block size
-      Torrent.update_with_block_downloaded(torrent, piece_index, block_index, 0)
+      Torrent.update_with_piece_downloaded(torrent, piece_index, 0)
     end)
   end
 
@@ -169,7 +153,10 @@ defmodule Bittorrent.Client do
             address: peer
           })
 
-        %Torrent{torrent | peer_downloader_pids: [pid | torrent.peer_downloader_pids]}
+        %Torrent{
+          torrent
+          | peer_downloader_pids: [pid | torrent.peer_downloaders]
+        }
     end
   end
 end

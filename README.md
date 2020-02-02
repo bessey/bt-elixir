@@ -22,6 +22,8 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 
 ## To Do
 
+- Rearchitect focussing on one piece per peer
+- Store pieces in ETS / DETS / Mnesia
 - Listen for incoming connections
 - Send bitfield message on connection
 - Respond to requests for blocks (actually seed!)

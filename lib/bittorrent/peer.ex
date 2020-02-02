@@ -14,7 +14,6 @@ defmodule Bittorrent.Peer do
       :reserved,
       :info_hash,
       :id,
-      :address,
       # Assume new peers have nothing until we know otherwise
       piece_set: MapSet.new(),
       # Their feelings for us
@@ -53,20 +52,19 @@ defmodule Bittorrent.Peer do
            Protocol.send_and_receive_handshake(
              info_sha,
              peer_id,
-             address,
              socket
            ) do
-      {:ok, %State{peer | address: Address.just_connected(peer.address)}, socket}
+      {:ok, peer, socket}
     else
       error -> error
     end
   end
 
-  def run_loop(peer, socket, timeout \\ :infinity) do
+  def download_loop(piece, peer, socket, timeout \\ :infinity) do
     with {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
          {:ok, peer} <- receive_until_buffer_empty(peer, socket),
          {:ok, peer} <- request_until_pipeline_full(peer, socket) do
-      run_loop(peer, socket)
+      download_loop(piece, peer, socket)
     else
       error -> error
     end
@@ -92,7 +90,7 @@ defmodule Bittorrent.Peer do
 
   # If the peer is choked there is no point sending messages, as they will be discarded
   defp request_until_pipeline_full(%State{choked: false} = peer, socket) do
-    case Bittorrent.Client.request_block(peer.piece_set) do
+    case Bittorrent.Client.request_piece(peer) do
       nil ->
         Protocol.send_not_interested(peer, socket)
 

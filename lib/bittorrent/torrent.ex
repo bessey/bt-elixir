@@ -19,11 +19,10 @@ defmodule Bittorrent.Torrent do
     uploaded: 0,
     downloaded: 0,
     peers: :queue.new(),
-    peer_downloader_pids: [],
-    assigned_peers: []
+    peer_downloader_pids: []
   ]
 
-  alias Bittorrent.{Torrent, TrackerInfo, Piece}
+  alias Bittorrent.{Torrent, TrackerInfo, Piece, PeerDownloader}
 
   def update_with_tracker_info(%Torrent{} = torrent, port) do
     info = TrackerInfo.for_torrent(torrent, port)
@@ -34,40 +33,19 @@ defmodule Bittorrent.Torrent do
     List.first(torrent.files).size
   end
 
-  def blocks_we_need_that_peer_has(our_pieces, their_piece_set) do
-    our_pieces
+  def pieces_we_need_that_peer_has(torrent, their_piece_set) do
+    in_progress_pieces = Enum.map(torrent.peer_downloader_pids, &PeerDownloader.get_piece/1)
+
+    torrent.pieces
     |> Enum.filter(fn our_piece -> Enum.at(their_piece_set, our_piece.number) end)
-    |> Enum.flat_map(fn our_piece_they_have -> blocks_we_need_in_piece(our_piece_they_have) end)
+    |> Enum.reject(fn our_piece -> Enum.member?(in_progress_pieces, our_piece.number) end)
   end
 
-  defp blocks_we_need_in_piece(piece) do
-    Piece.missing_blocks(piece)
-    |> Enum.map(fn block_index -> {piece.number, block_index} end)
-  end
-
-  def request_for_block(torrent, piece_index, block_index) do
-    block_size = Piece.block_size()
-    full_size = size(torrent)
-    begin = block_index * Piece.block_size()
-
-    block_size =
-      if begin + block_size > full_size do
-        size(torrent) - begin
-      else
-        block_size
-      end
-
-    {piece_index, block_index * block_size, block_size}
-  end
-
-  def update_with_block_downloaded(torrent, piece_index, block_index, block_size) do
+  def update_with_piece_downloaded(torrent, piece_index, block_size) do
     pieces =
       Enum.map(torrent.pieces, fn piece ->
         if piece.number == piece_index do
-          %Piece{
-            piece
-            | blocks: MapSet.put(piece.blocks, block_index)
-          }
+          Piece.complete(piece)
         else
           piece
         end
