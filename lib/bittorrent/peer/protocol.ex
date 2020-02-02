@@ -3,7 +3,7 @@ defmodule Bittorrent.Peer.Protocol do
   Functions for sending and receiving messages conforming to the BitTorrent Peer Protocol
   """
   require Logger
-  alias Bittorrent.{Peer.State}
+  alias Bittorrent.{Peer.State, Piece}
 
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
@@ -106,16 +106,31 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   defp process_message(peer, @msg_piece, length, socket) do
+    piece_we_want = peer.piece
+
     case :gen_tcp.recv(socket, length - 1) do
       {:ok,
        <<
-         piece_index::unsigned-integer-size(32),
+         ^piece_we_want::unsigned-integer-size(32),
          begin::unsigned-integer-size(32),
          data::binary
        >>} ->
-        Logger.debug("Msg: piece #{piece_index}")
-        Bittorrent.Client.block_downloaded(piece_index, begin, data)
-        {:ok, %State{peer | requests_in_flight: peer.requests_in_flight - 1}}
+        Logger.debug("Msg: piece #{piece_we_want}")
+
+        {:ok,
+         %State{
+           peer
+           | requests_in_flight: peer.requests_in_flight - 1,
+             buffer: add_block_to_buffer(peer.buffer, begin, data)
+         }}
+
+      {:ok,
+       <<
+         other_piece::unsigned-integer-size(32),
+         _rest::binary
+       >>} ->
+        Logger.warn("Msg: piece #{other_piece} which we didn't ask for")
+        {:ok, peer}
 
       {:error, _} = error ->
         error
@@ -287,5 +302,10 @@ defmodule Bittorrent.Peer.Protocol do
     |> Enum.filter(fn {has_piece, _index} -> has_piece end)
     |> Enum.map(fn {_has_piece, index} -> index end)
     |> MapSet.new()
+  end
+
+  defp add_block_to_buffer(buffer, begin, data) do
+    block_index = Piece.begin_to_block_index(begin)
+    :array.set(block_index, data, buffer)
   end
 end

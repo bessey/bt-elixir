@@ -5,6 +5,7 @@ defmodule Bittorrent.Peer do
   """
 
   alias Bittorrent.Peer.{Protocol, Address}
+  alias Bittorrent.Piece
   require Logger
 
   defmodule State do
@@ -23,7 +24,9 @@ defmodule Bittorrent.Peer do
       interested_in: false,
       choking: true,
       # Stats
-      requests_in_flight: 0
+      piece: nil,
+      requests_in_flight: 0,
+      buffer: nil
     ]
 
     def have_piece(peer, piece) do
@@ -60,11 +63,17 @@ defmodule Bittorrent.Peer do
     end
   end
 
-  def download_loop(piece, peer, socket, timeout \\ :infinity) do
+  def download_loop(peer, socket, timeout \\ :infinity) do
+    peer = %State{peer | buffer: :array.new(Piece.block_count(peer.piece))}
+
     with {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
          {:ok, peer} <- receive_until_buffer_empty(peer, socket),
          {:ok, peer} <- request_until_pipeline_full(peer, socket) do
-      download_loop(piece, peer, socket)
+      if piece_buffer_complete?(peer.buffer) do
+        {:ok, buffer_to_binary(peer.buffer), %State{peer | buffer: nil, piece: nil}}
+      else
+        download_loop(peer, socket)
+      end
     else
       error -> error
     end
@@ -113,7 +122,11 @@ defmodule Bittorrent.Peer do
     Protocol.send_interested(peer, socket)
   end
 
-  defp ensure_requests_saturated(%State{requests_in_flight: reqs} = peer, socket, request)
+  defp ensure_requests_saturated(
+         %State{requests_in_flight: reqs} = peer,
+         socket,
+         request
+       )
        when reqs < @max_requests_in_flight do
     case Protocol.send_request(peer, socket, request) do
       {:ok, peer} ->
@@ -139,5 +152,13 @@ defmodule Bittorrent.Peer do
       Logger.debug("Connected Too Recently: sleeping for #{sleep_for} seconds")
       Process.sleep(sleep_for * 1000)
     end
+  end
+
+  defp piece_buffer_complete?(buffer) do
+    :array.size(buffer) == :array.sparse_size(buffer)
+  end
+
+  defp buffer_to_binary(buffer) do
+    :array.to_list(buffer) |> Enum.reduce(fn block, piece -> piece <> block end)
   end
 end

@@ -15,7 +15,6 @@ defmodule Bittorrent.PeerDownloader do
       # Peer State
       address: nil,
       peer: nil,
-      piece: nil,
       socket: nil
     ]
   end
@@ -42,25 +41,30 @@ defmodule Bittorrent.PeerDownloader do
 
   @impl true
   def handle_call(:get_piece, _from, state) do
-    {:reply, state.piece, state}
+    {:reply, state.peer.piece, state}
   end
 
   @impl true
   def handle_info({_task, {:connected, peer}}, state) do
     Logger.debug("PeerDownloader: connected")
-    piece = Client.request_piece(state)
-    start_download_piece_task(state)
 
-    {:noreply,
-     %State{state | peer: peer, piece: piece, address: Peer.Address.just_connected(state.address)}}
+    state =
+      %State{
+        state
+        | address: Peer.Address.just_connected(state.address),
+          peer: peer
+      }
+      |> request_piece()
+
+    {:noreply, state}
   end
 
   @impl true
-  def handle_info({_task, {:downloaded, piece}}, state) do
+  def handle_info({_task, {:downloaded, piece, peer}}, state) do
     Logger.debug("PeerDownloader: piece complete, fetching next piece")
     Client.piece_downloaded(state.piece, piece)
-    piece = Client.request_piece(state)
-    {:noreply, %State{state | piece: piece}}
+
+    {:noreply, request_piece(%State{state | peer: peer})}
   end
 
   @impl true
@@ -68,7 +72,7 @@ defmodule Bittorrent.PeerDownloader do
     Logger.debug("PeerDownloader: new connection because error #{reason}")
     Client.return_peer(address)
 
-    state = %State{state | address: request_peer(), piece: nil}
+    state = %State{state | address: request_peer(), peer: %Peer.State{state.peer | piece: nil}}
     start_connect_task_or_sleep(state)
     {:noreply, state}
   end
@@ -113,12 +117,12 @@ defmodule Bittorrent.PeerDownloader do
 
   defp start_download_piece_task(state) do
     Task.async(fn ->
-      case Peer.download_loop(state.piece, state.peer, state.socket) do
+      case Peer.download_loop(state.peer, state.socket) do
         {:error, reason} ->
           {:error, state.address, reason}
 
-        {:ok, piece} ->
-          {:downloaded, piece}
+        {:ok, piece, peer} ->
+          {:downloaded, piece, peer}
       end
     end)
   end
@@ -126,5 +130,15 @@ defmodule Bittorrent.PeerDownloader do
   defp request_peer() do
     {:ok, peer} = Client.request_peer()
     peer
+  end
+
+  defp request_piece(state) do
+    piece = Client.request_piece(state)
+
+    %State{
+      state
+      | peer: %Peer.State{state.peer | piece: piece}
+    }
+    |> start_download_piece_task()
   end
 end

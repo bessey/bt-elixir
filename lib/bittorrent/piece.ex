@@ -55,4 +55,12 @@ defmodule Bittorrent.Piece do
   def piece_complete?(piece) do
     piece.have
   end
+
+  def block_count(piece) do
+    ceil(piece.size / @block_size)
+  end
+
+  def begin_to_block_index(begin) do
+    ceil(begin / @block_size)
+  end
 end
