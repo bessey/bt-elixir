@@ -42,9 +42,13 @@ defmodule Bittorrent.Client do
 
     torrent = restore_from_progress(torrent)
 
-    Enum.reduce(1..max_conns, torrent, fn _, torrent ->
-      start_peer_downloader(torrent)
-    end)
+    {torrent, child_processes} =
+      Enum.reduce(1..max_conns, {torrent, []}, fn index, {torrent, children} ->
+        {peer, torrent} = handle_request_peer(torrent)
+        {torrent, [build_child(index, peer, torrent) | children]}
+      end)
+
+    {:ok, _} = Supervisor.start_link(child_processes, strategy: :one_for_one)
 
     {:ok, torrent}
   end
@@ -137,23 +141,18 @@ defmodule Bittorrent.Client do
     end)
   end
 
-  defp start_peer_downloader(%Torrent{} = torrent) do
-    case handle_request_peer(torrent) do
-      {nil, torrent} ->
-        torrent
-
-      {peer, torrent} ->
-        {:ok, pid} =
-          PeerDownloader.start_link(%PeerDownloader.State{
-            info_sha: torrent.info_sha,
-            peer_id: torrent.peer_id,
-            address: peer
-          })
-
-        %Torrent{
-          torrent
-          | peer_downloader_pids: [pid | torrent.peer_downloader_pids]
-        }
-    end
+  defp build_child(index, peer, torrent) do
+    %{
+      id: index,
+      start:
+        {PeerDownloader, :start_link,
+         [
+           {
+             torrent.info_sha,
+             torrent.peer_id,
+             peer
+           }
+         ]}
+    }
   end
 end

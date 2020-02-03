@@ -20,7 +20,6 @@ defmodule Bittorrent.Torrent do
     uploaded: 0,
     downloaded: 0,
     peers: :queue.new(),
-    peer_downloader_pids: [],
     in_progress_pieces: []
   ]
 

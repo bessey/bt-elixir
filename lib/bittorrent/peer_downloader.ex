@@ -26,22 +26,31 @@ defmodule Bittorrent.PeerDownloader do
 
   # Client
 
-  def start_link(%State{} = state) do
-    GenServer.start_link(__MODULE__, state)
+  def start_link({info_sha, peer_id, address}) do
+    GenServer.start_link(__MODULE__, {info_sha, peer_id, address})
   end
 
   # Server
 
   @impl true
-  @spec init(peer_downloader()) :: {:ok, peer_downloader()}
-  def init(%State{peer_id: nil} = state) do
+  def init({info_sha, peer_id, nil}) do
     sleep()
 
-    {:ok, state}
+    {:ok,
+     %State{
+       info_sha: info_sha,
+       peer_id: peer_id
+     }}
   end
 
   @impl true
-  def init(%State{} = state) do
+  def init({info_sha, peer_id, address}) do
+    state = %State{
+      info_sha: info_sha,
+      peer_id: peer_id,
+      address: address
+    }
+
     start_handshake_task_or_sleep(state)
 
     {:ok, state}
