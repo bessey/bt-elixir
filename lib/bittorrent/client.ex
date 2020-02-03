@@ -4,13 +4,13 @@ defmodule Bittorrent.Client do
   """
   require Logger
   use GenServer
-  alias Bittorrent.{Torrent, PeerDownloader}
+  alias Bittorrent.{Torrent, Peer, PeerDownloader}
 
-  @blocks_in_progress_path "_blocks"
+  @pieces_in_progress_path "_pieces"
   @tmp_extension ".tmp"
   @max_connections 50
 
-  def in_progress_path(), do: @blocks_in_progress_path
+  def in_progress_path(), do: @pieces_in_progress_path
 
   # Client
 
@@ -23,7 +23,7 @@ defmodule Bittorrent.Client do
   end
 
   def return_peer(address) do
-    GenServer.call(__MODULE__, {:return_peer, address})
+    GenServer.call(__MODULE__, {:return_peer, Peer.Address.last_connected(address)})
   end
 
   def request_piece(piece_set) do
@@ -80,7 +80,7 @@ defmodule Bittorrent.Client do
       {:reply, piece,
        %Torrent{torrent | in_progress_pieces: [piece.number, torrent.in_progress_pieces]}}
     else
-      {:noreply, torrent}
+      {:reply, nil, torrent}
     end
   end
 
@@ -88,23 +88,18 @@ defmodule Bittorrent.Client do
   def handle_call({:piece_downloaded, piece_index, data}, _from, torrent) do
     Logger.debug("Piece downloaded: #{piece_index}")
 
-    :ok =
-      File.write(
-        Path.join([
-          torrent.output_path,
-          @blocks_in_progress_path,
-          "#{piece_index}#{@tmp_extension}"
-        ]),
-        data
-      )
-
-    piece_size = byte_size(data)
-
-    {:noreply,
+    {:reply,
+     File.write(
+       Path.join([
+         torrent.output_path,
+         @pieces_in_progress_path,
+         "#{piece_index}#{@tmp_extension}"
+       ]),
+       data
+     ),
      Torrent.update_with_piece_downloaded(
        torrent,
-       piece_index,
-       piece_size
+       piece_index
      )}
   end
 
@@ -125,20 +120,26 @@ defmodule Bittorrent.Client do
   end
 
   defp restore_from_progress(torrent) do
-    blocks_path = Path.join([torrent.output_path, @blocks_in_progress_path])
+    pieces_path = Path.join([torrent.output_path, @pieces_in_progress_path])
     tmp_extension_index = -(String.length(@tmp_extension) + 1)
 
-    {:ok, existing_blocks} = File.ls(blocks_path)
+    {:ok, existing_pieces} = File.ls(pieces_path)
 
-    Logger.info("We already downloaded #{length(existing_blocks)} blocks :)")
+    state =
+      existing_pieces
+      |> Enum.map(&String.slice(&1, 0..tmp_extension_index))
+      |> Enum.map(&String.to_integer/1)
+      |> Enum.reduce(torrent, fn piece_index, torrent ->
+        Torrent.update_with_piece_downloaded(torrent, piece_index)
+      end)
 
-    existing_blocks
-    |> Enum.map(&String.slice(&1, 0..tmp_extension_index))
-    |> Enum.map(&String.to_integer/1)
-    |> Enum.reduce(torrent, fn piece_index, torrent ->
-      # TODO read block size
-      Torrent.update_with_piece_downloaded(torrent, piece_index, 0)
-    end)
+    Logger.info(
+      "We already downloaded #{Enum.filter(state.pieces, & &1.have) |> length()}/#{
+        length(state.pieces)
+      } pieces :)"
+    )
+
+    state
   end
 
   defp build_child(index, peer, torrent) do

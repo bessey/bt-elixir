@@ -52,6 +52,6 @@ defmodule Bittorrent.TrackerInfo do
     port_bytes = Enum.slice(binary, 4, 2)
     port = (Enum.fetch!(port_bytes, 0) <<< 8) + Enum.fetch!(port_bytes, 1)
 
-    %Address{ip: ip, port: port, last_connected_at: nil}
+    %Address{ip: ip, port: port}
   end
 end

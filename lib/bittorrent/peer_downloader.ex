@@ -63,8 +63,7 @@ defmodule Bittorrent.PeerDownloader do
 
     state = %State{
       state
-      | address: Peer.Address.just_connected(state.address),
-        peer: peer,
+      | peer: peer,
         socket: socket
     }
 
@@ -81,19 +80,12 @@ defmodule Bittorrent.PeerDownloader do
   end
 
   @impl true
-  def handle_info({_task, {:error, address, reason}}, state) do
+  def handle_info({_task, {:error, reason}}, state) do
     Logger.debug("PeerDownloader: new connection because error #{reason}")
-    Client.return_peer(address)
 
-    state = %State{
-      state
-      | address: request_peer(),
-        peer: state.peer && %Peer.State{state.peer | piece: nil},
-        socket: nil
-    }
+    Client.return_peer(state.address)
 
-    start_handshake_task_or_sleep(state)
-    {:noreply, state}
+    {:noreply, start_handshake_with_new_peer(state)}
   end
 
   @impl true
@@ -140,8 +132,8 @@ defmodule Bittorrent.PeerDownloader do
 
           {:connected, connected_peer, socket}
 
-        {:error, reason} ->
-          {:error, Peer.Address.just_connected(state.address), reason}
+        error ->
+          error
       end
     end)
   end
@@ -167,15 +159,36 @@ defmodule Bittorrent.PeerDownloader do
   end
 
   defp request_piece(state) do
-    piece = Client.request_piece(state.peer.piece_set)
+    Client.request_piece(state.peer.piece_set)
+    |> process_piece(state)
+  end
 
+  defp process_piece(nil, state) do
+    Logger.debug("PeerDownloader: peer has no piece we need, returning")
+    Client.return_peer(state.address)
+
+    start_handshake_with_new_peer(state)
+  end
+
+  defp process_piece(piece, state) do
     state = %State{
       state
       | peer: %Peer.State{state.peer | piece: piece}
     }
 
     start_download_piece_task(state)
+    state
+  end
 
+  defp start_handshake_with_new_peer(state) do
+    state = %State{
+      state
+      | address: request_peer(),
+        peer: state.peer && %Peer.State{state.peer | piece: nil},
+        socket: nil
+    }
+
+    start_handshake_task_or_sleep(state)
     state
   end
 end

@@ -15,7 +15,7 @@ defmodule Bittorrent.Piece do
     [
       %Piece{
         sha: sha,
-        number: 1,
+        number: 0,
         size: piece_size
       }
     ] ++

@@ -36,11 +36,12 @@ defmodule Bittorrent.Torrent do
 
   def pieces_we_need_that_peer_has(torrent, their_piece_set) do
     torrent.pieces
-    |> Enum.filter(fn our_piece -> Enum.at(their_piece_set, our_piece.number) end)
+    |> Enum.reject(fn our_piece -> our_piece.have end)
+    |> Enum.filter(fn our_piece -> MapSet.member?(their_piece_set, our_piece.number) end)
     |> Enum.reject(fn our_piece -> Enum.member?(torrent.in_progress_pieces, our_piece.number) end)
   end
 
-  def update_with_piece_downloaded(torrent, piece_index, block_size) do
+  def update_with_piece_downloaded(torrent, piece_index) do
     pieces =
       Enum.map(torrent.pieces, fn piece ->
         if piece.number == piece_index do
@@ -53,7 +54,6 @@ defmodule Bittorrent.Torrent do
     %Torrent{
       torrent
       | pieces: pieces,
-        downloaded: torrent.downloaded + block_size,
         in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
     }
   end
