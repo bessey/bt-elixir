@@ -63,4 +63,10 @@ defmodule Bittorrent.Piece do
   def begin_to_block_index(begin) do
     ceil(begin / @block_size)
   end
+
+  def request_for_block_index(%Piece{} = piece, index) do
+    begin = index * @block_size
+    block_size = min(@block_size, piece.size - begin)
+    {piece.number, begin, block_size}
+  end
 end

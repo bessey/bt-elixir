@@ -11,6 +11,7 @@ defmodule Bittorrent do
   Download the given Torrent to the given directory.
   """
   def download(file_path, output_path) do
+    # :observer.start()
     prepare_output(output_path)
 
     torrent_file_info = File.read!(file_path) |> TorrentFile.extract_info()

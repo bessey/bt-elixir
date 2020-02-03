@@ -3,7 +3,7 @@ defmodule Bittorrent.Peer.Protocol do
   Functions for sending and receiving messages conforming to the BitTorrent Peer Protocol
   """
   require Logger
-  alias Bittorrent.{Peer.State, Piece}
+  alias Bittorrent.{Peer.State, Peer.Buffer, Piece}
 
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
@@ -27,7 +27,7 @@ defmodule Bittorrent.Peer.Protocol do
       {:ok, message_length} ->
         receive_message_body(peer, message_length, socket)
 
-      {:error, _} = error ->
+      {:error, _reason} = error ->
         error
     end
   end
@@ -89,11 +89,11 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   defp process_message(peer, @msg_bitfield, length, socket) do
-    Logger.debug("Msg: bitfield #{length}")
-
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<bitfield::bits>>} ->
-        {:ok, %State{peer | piece_set: bitfield_to_piece_set(bitfield), choked: false}}
+        piece_set = bitfield_to_piece_set(bitfield)
+        Logger.debug("Msg: bitfield (#{MapSet.size(piece_set)} pieces)")
+        {:ok, %State{peer | piece_set: piece_set}}
 
       {:error, _} = error ->
         error
@@ -106,7 +106,7 @@ defmodule Bittorrent.Peer.Protocol do
   end
 
   defp process_message(peer, @msg_piece, length, socket) do
-    piece_we_want = peer.piece
+    piece_we_want = peer.piece.number
 
     case :gen_tcp.recv(socket, length - 1) do
       {:ok,
@@ -115,13 +115,13 @@ defmodule Bittorrent.Peer.Protocol do
          begin::unsigned-integer-size(32),
          data::binary
        >>} ->
-        Logger.debug("Msg: piece #{piece_we_want}")
+        Logger.debug("Msg: piece #{piece_we_want}: #{begin} (#{Buffer.progress(peer.buffer)})")
 
         {:ok,
          %State{
            peer
            | requests_in_flight: peer.requests_in_flight - 1,
-             buffer: add_block_to_buffer(peer.buffer, begin, data)
+             buffer: Buffer.add_block(peer.buffer, begin, data)
          }}
 
       {:ok,
@@ -171,7 +171,9 @@ defmodule Bittorrent.Peer.Protocol do
              peer_id::binary-size(20)
            >>
          } <- :gen_tcp.recv(socket, base_length + pstr_length) do
-      Logger.debug("Connected: #{Base.encode64(peer_id)}")
+      ez_peer_id = Base.encode64(peer_id)
+      Logger.debug("Connected: #{ez_peer_id}")
+      Logger.metadata(peer: ez_peer_id)
 
       {:ok,
        %State{
@@ -192,7 +194,9 @@ defmodule Bittorrent.Peer.Protocol do
     handshake = handshake_message(info_sha, peer_id)
 
     with :ok <- :gen_tcp.send(socket, handshake),
-         {:ok, peer} <- receive_handshake(socket) do
+         {:ok, peer} <- receive_handshake(socket),
+         # Hoping to receive a bitfield message so we know what pieces they have
+         {:ok, peer} <- receive_message(peer, socket, 1000) do
       {:ok, peer}
     else
       {:error, _} = error ->
@@ -200,18 +204,23 @@ defmodule Bittorrent.Peer.Protocol do
     end
   end
 
-  def send_request(peer, socket, {block, begin, block_size}) do
-    Logger.debug("Send: request #{block} (#{peer.requests_in_flight + 1})")
+  def send_request(peer, socket, {piece, begin, block_size}) do
+    Logger.debug("Send: request #{piece}: #{begin} (#{peer.requests_in_flight + 1})")
 
     case :gen_tcp.send(socket, <<
            13::unsigned-integer-size(32),
            @msg_request::unsigned-integer-size(8),
-           block::unsigned-integer-size(32),
+           piece::unsigned-integer-size(32),
            begin::unsigned-integer-size(32),
            block_size::unsigned-integer-size(32)
          >>) do
       :ok ->
-        {:ok, %State{peer | requests_in_flight: peer.requests_in_flight + 1}}
+        {:ok,
+         %State{
+           peer
+           | requests_in_flight: peer.requests_in_flight + 1,
+             buffer: Buffer.add_block(peer.buffer, begin, :in_flight)
+         }}
 
       {:error, _} = error ->
         error
@@ -302,10 +311,5 @@ defmodule Bittorrent.Peer.Protocol do
     |> Enum.filter(fn {has_piece, _index} -> has_piece end)
     |> Enum.map(fn {_has_piece, index} -> index end)
     |> MapSet.new()
-  end
-
-  defp add_block_to_buffer(buffer, begin, data) do
-    block_index = Piece.begin_to_block_index(begin)
-    :array.set(block_index, data, buffer)
   end
 end

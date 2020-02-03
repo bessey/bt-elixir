@@ -4,7 +4,7 @@ defmodule Bittorrent.Peer do
   to send us the pieces we need.
   """
 
-  alias Bittorrent.Peer.{Protocol, Address}
+  alias Bittorrent.Peer.{Protocol, Buffer}
   alias Bittorrent.Piece
   require Logger
 
@@ -21,8 +21,8 @@ defmodule Bittorrent.Peer do
       choked: true,
       interested: false,
       # Our feelings for them
-      interested_in: false,
       choking: true,
+      interested_in: false,
       # Stats
       piece: nil,
       requests_in_flight: 0,
@@ -49,7 +49,7 @@ defmodule Bittorrent.Peer do
              address.ip,
              address.port,
              [:binary, packet: :raw, active: false, nodelay: true],
-             3000
+             1000
            ),
          {:ok, peer} <-
            Protocol.send_and_receive_handshake(
@@ -64,13 +64,14 @@ defmodule Bittorrent.Peer do
   end
 
   def download_loop(peer, socket, timeout \\ :infinity) do
-    peer = %State{peer | buffer: :array.new(Piece.block_count(peer.piece))}
+    peer = %State{peer | buffer: peer.buffer || Buffer.init(peer.piece)}
 
-    with {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
-         {:ok, peer} <- receive_until_buffer_empty(peer, socket),
-         {:ok, peer} <- request_until_pipeline_full(peer, socket) do
-      if piece_buffer_complete?(peer.buffer) do
-        {:ok, buffer_to_binary(peer.buffer), %State{peer | buffer: nil, piece: nil}}
+    with {:ok, peer} <- request_until_pipeline_full(peer, socket),
+         {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
+         {:ok, peer} <- receive_until_buffer_empty(peer, socket) do
+      if Buffer.complete?(peer.buffer) do
+        Logger.debug("Finished building piece #{peer.piece.number}")
+        {:ok, Buffer.to_binary(peer.buffer), %State{peer | buffer: nil, piece: nil}}
       else
         download_loop(peer, socket)
       end
@@ -99,7 +100,7 @@ defmodule Bittorrent.Peer do
 
   # If the peer is choked there is no point sending messages, as they will be discarded
   defp request_until_pipeline_full(%State{choked: false} = peer, socket) do
-    case Bittorrent.Client.request_piece(peer) do
+    case request_block(peer) do
       nil ->
         Protocol.send_not_interested(peer, socket)
 
@@ -154,11 +155,9 @@ defmodule Bittorrent.Peer do
     end
   end
 
-  defp piece_buffer_complete?(buffer) do
-    :array.size(buffer) == :array.sparse_size(buffer)
-  end
-
-  defp buffer_to_binary(buffer) do
-    :array.to_list(buffer) |> Enum.reduce(fn block, piece -> piece <> block end)
+  defp request_block(peer) do
+    if index = Buffer.missing_block_index(peer.buffer) do
+      Piece.request_for_block_index(peer.piece, index)
+    end
   end
 end

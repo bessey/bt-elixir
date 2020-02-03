@@ -2,6 +2,7 @@ defmodule Bittorrent.Torrent do
   @moduledoc """
   A piece, as defined in the BitTorrent protocol. A torrent is made up of a fixed number of pieces of an equal fixed size.
   """
+  require Logger
 
   defstruct [
     # Tracker Info
@@ -19,10 +20,11 @@ defmodule Bittorrent.Torrent do
     uploaded: 0,
     downloaded: 0,
     peers: :queue.new(),
-    peer_downloader_pids: []
+    peer_downloader_pids: [],
+    in_progress_pieces: []
   ]
 
-  alias Bittorrent.{Torrent, TrackerInfo, Piece, PeerDownloader}
+  alias Bittorrent.{Torrent, TrackerInfo, Piece}
 
   def update_with_tracker_info(%Torrent{} = torrent, port) do
     info = TrackerInfo.for_torrent(torrent, port)
@@ -34,11 +36,9 @@ defmodule Bittorrent.Torrent do
   end
 
   def pieces_we_need_that_peer_has(torrent, their_piece_set) do
-    in_progress_pieces = Enum.map(torrent.peer_downloader_pids, &PeerDownloader.get_piece/1)
-
     torrent.pieces
     |> Enum.filter(fn our_piece -> Enum.at(their_piece_set, our_piece.number) end)
-    |> Enum.reject(fn our_piece -> Enum.member?(in_progress_pieces, our_piece.number) end)
+    |> Enum.reject(fn our_piece -> Enum.member?(torrent.in_progress_pieces, our_piece.number) end)
   end
 
   def update_with_piece_downloaded(torrent, piece_index, block_size) do
@@ -51,6 +51,11 @@ defmodule Bittorrent.Torrent do
         end
       end)
 
-    %Torrent{torrent | pieces: pieces, downloaded: torrent.downloaded + block_size}
+    %Torrent{
+      torrent
+      | pieces: pieces,
+        downloaded: torrent.downloaded + block_size,
+        in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
+    }
   end
 end

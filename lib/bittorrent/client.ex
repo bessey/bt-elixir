@@ -4,11 +4,11 @@ defmodule Bittorrent.Client do
   """
   require Logger
   use GenServer
-  alias Bittorrent.{Torrent, PeerDownloader, Peer}
+  alias Bittorrent.{Torrent, PeerDownloader}
 
   @blocks_in_progress_path "_blocks"
   @tmp_extension ".tmp"
-  @max_connections 100
+  @max_connections 50
 
   def in_progress_path(), do: @blocks_in_progress_path
 
@@ -18,16 +18,16 @@ defmodule Bittorrent.Client do
     GenServer.start_link(__MODULE__, torrent, name: :downloader)
   end
 
-  def request_piece(peer_pieces) do
-    GenServer.call(:downloader, {:request_piece, peer_pieces})
-  end
-
   def request_peer() do
     GenServer.call(:downloader, {:request_peer})
   end
 
   def return_peer(address) do
     GenServer.call(:downloader, {:return_peer, address})
+  end
+
+  def request_piece(piece_set) do
+    GenServer.call(:downloader, {:request_piece, piece_set})
   end
 
   def piece_downloaded(piece_index, data) do
@@ -46,14 +46,6 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
-  def handle_call({:request_piece, %Peer.State{} = peer}, _from, torrent) do
-    pieces = Torrent.pieces_we_need_that_peer_has(torrent, peer.pieces)
-    piece = pieces |> Enum.shuffle() |> List.first()
-
-    {:reply, piece, torrent}
-  end
-
-  @impl true
   def handle_call({:request_peer}, _from, torrent) do
     {assigned_peer, state} = handle_request_peer(torrent)
 
@@ -69,6 +61,19 @@ defmodule Bittorrent.Client do
        torrent
        | peers: peers_with_returned
      }}
+  end
+
+  @impl true
+  def handle_call({:request_piece, piece_set}, _from, torrent) do
+    pieces = Torrent.pieces_we_need_that_peer_has(torrent, piece_set)
+    piece = pieces |> Enum.shuffle() |> List.first()
+
+    if piece do
+      {:reply, piece,
+       %Torrent{torrent | in_progress_pieces: [piece.number, torrent.in_progress_pieces]}}
+    else
+      {:noreply, torrent}
+    end
   end
 
   @impl true
@@ -140,7 +145,7 @@ defmodule Bittorrent.Client do
     end)
   end
 
-  defp start_peer_downloader(torrent) do
+  defp start_peer_downloader(%Torrent{} = torrent) do
     case handle_request_peer(torrent) do
       {nil, torrent} ->
         torrent
@@ -155,7 +160,7 @@ defmodule Bittorrent.Client do
 
         %Torrent{
           torrent
-          | peer_downloader_pids: [pid | torrent.peer_downloaders]
+          | peer_downloader_pids: [pid | torrent.peer_downloader_pids]
         }
     end
   end

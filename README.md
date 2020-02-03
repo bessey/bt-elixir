@@ -19,10 +19,11 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Save downloaded blocks to disk
 - Dropped / timeout connection recovery
 - Get working as a script
+- Rearchitect focussing on one piece per peer
 
 ## To Do
 
-- Rearchitect focussing on one piece per peer
+- Move peer assignment from pull to push
 - Store pieces in ETS / DETS / Mnesia
 - Listen for incoming connections
 - Send bitfield message on connection
