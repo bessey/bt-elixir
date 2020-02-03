@@ -32,8 +32,15 @@ defmodule Bittorrent do
 
     torrent_info = Torrent.update_with_tracker_info(torrent_info, @port)
 
-    {:ok, client_pid} = Client.start_link(torrent_info)
-    Client.start_peer_downloaders()
+    children = [
+      %{
+        id: Client,
+        start: {Client, :start_link, [torrent_info]}
+      }
+    ]
+
+    # Now we start the supervisor with the children and a strategy
+    {:ok, client_pid} = Supervisor.start_link(children, strategy: :one_for_one)
 
     exit_when_process_exits(client_pid)
   end

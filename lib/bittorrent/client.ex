@@ -15,34 +15,38 @@ defmodule Bittorrent.Client do
   # Client
 
   def start_link(%Torrent{} = torrent) do
-    GenServer.start_link(__MODULE__, torrent, name: :downloader)
+    GenServer.start_link(__MODULE__, torrent, name: __MODULE__)
   end
 
   def request_peer() do
-    GenServer.call(:downloader, {:request_peer})
+    GenServer.call(__MODULE__, {:request_peer})
   end
 
   def return_peer(address) do
-    GenServer.call(:downloader, {:return_peer, address})
+    GenServer.call(__MODULE__, {:return_peer, address})
   end
 
   def request_piece(piece_set) do
-    GenServer.call(:downloader, {:request_piece, piece_set})
+    GenServer.call(__MODULE__, {:request_piece, piece_set})
   end
 
   def piece_downloaded(piece_index, data) do
-    GenServer.cast(:downloader, {:piece_downloaded, piece_index, data})
-  end
-
-  def start_peer_downloaders() do
-    GenServer.cast(:downloader, {:start_peer_downloaders})
+    GenServer.call(__MODULE__, {:piece_downloaded, piece_index, data})
   end
 
   # Server (callbacks)
 
   @impl true
   def init(%Torrent{} = torrent) do
-    {:ok, restore_from_progress(torrent)}
+    max_conns = min(:queue.len(torrent.peers), @max_connections)
+
+    torrent = restore_from_progress(torrent)
+
+    Enum.reduce(1..max_conns, torrent, fn _, torrent ->
+      start_peer_downloader(torrent)
+    end)
+
+    {:ok, torrent}
   end
 
   @impl true
@@ -77,7 +81,7 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
-  def handle_cast({:piece_downloaded, piece_index, data}, torrent) do
+  def handle_call({:piece_downloaded, piece_index, data}, _from, torrent) do
     Logger.debug("Piece downloaded: #{piece_index}")
 
     :ok =
@@ -98,18 +102,6 @@ defmodule Bittorrent.Client do
        piece_index,
        piece_size
      )}
-  end
-
-  @impl true
-  def handle_cast({:start_peer_downloaders}, torrent) do
-    max_conns = min(:queue.len(torrent.peers), @max_connections)
-
-    torrent =
-      Enum.reduce(1..max_conns, torrent, fn _, torrent ->
-        start_peer_downloader(torrent)
-      end)
-
-    {:noreply, torrent}
   end
 
   # Utilities
