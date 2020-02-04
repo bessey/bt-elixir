@@ -345,7 +345,7 @@ defmodule Bittorrent.Peer.Protocol do
     pad_zero_bit_count = rem(length(bitfield_without_padding), 8)
     pad_zero_bits = List.duplicate(0, pad_zero_bit_count)
 
-    (bitfield_without_padding ++ pad_zero_bits) |> :binary.list_to_bin()
+    for i <- bitfield_without_padding ++ pad_zero_bits, do: <<i::1>>, into: <<>>
   end
 
   defp send_message(socket, message_id, <<message::binary>> \\ <<>>) do
