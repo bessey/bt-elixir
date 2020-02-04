@@ -104,10 +104,11 @@ defmodule Bittorrent.Client do
 
     case Piece.store_data(piece, data, torrent.output_path) do
       :ok ->
-        Torrent.update_with_piece_downloaded(
-          torrent,
-          piece.number
-        )
+        {:reply, :ok,
+         Torrent.update_with_piece_downloaded(
+           torrent,
+           piece.number
+         )}
 
       {:error, :sha_mismatch} ->
         Logger.warn("Piece SHA failure #{piece.number}")
