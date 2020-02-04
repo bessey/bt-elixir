@@ -73,7 +73,7 @@ defmodule Bittorrent.PeerDownloader do
   @impl true
   def handle_info({_task, {:downloaded, piece, peer}}, state) do
     Logger.debug("PeerDownloader: piece complete, fetching next piece")
-    Client.piece_downloaded(state.peer.piece.number, piece)
+    Client.piece_downloaded(state.peer.piece, piece)
     state = %State{state | peer: peer}
 
     {:noreply, request_piece(state)}

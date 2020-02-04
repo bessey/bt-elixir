@@ -11,38 +11,21 @@ defmodule Bittorrent.Piece do
 
   def block_size, do: @block_size
 
-  def from_shas([sha | rest], torrent_size, piece_size) do
+  # Pretty sure this is wrong and causes an extra piece
+  def from_shas(shas, remaining_size, piece_size, index \\ 0)
+
+  def from_shas([sha | rest], remaining_size, piece_size, index) do
     [
       %Piece{
         sha: sha,
-        number: 0,
+        number: index,
         size: piece_size
       }
-    ] ++
-      from_shas(rest, torrent_size - piece_size, piece_size, 2)
-  end
-
-  def from_shas([sha | rest], remaining_size, piece_size, piece_number)
-      when length(rest) > 0 do
-    [
-      %Piece{
-        sha: sha,
-        number: piece_number,
-        size: piece_size
-      }
-    ] ++
-      from_shas(rest, remaining_size - piece_size, piece_size, piece_number + 1)
-  end
-
-  def from_shas([sha], remaining_size, _piece_size, piece_number) do
-    [
-      %Piece{
-        sha: sha,
-        number: piece_number,
-        size: remaining_size
-      }
+      | from_shas(rest, remaining_size - piece_size, piece_size, index + 1)
     ]
   end
+
+  def from_shas([], _remaining_size, _piece_size, _index), do: []
 
   def complete(piece) do
     %Piece{piece | have: true}

@@ -36,6 +36,8 @@ defmodule Bittorrent.TorrentFile do
   end
 
   defp piece_shas_from_binary(binary) do
-    binary |> :binary.bin_to_list() |> Enum.chunk_every(20) |> Enum.map(&to_string/1)
+    for <<sha::binary-size(20) <- binary>>, into: [] do
+      sha
+    end
   end
 end

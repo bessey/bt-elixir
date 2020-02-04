@@ -57,4 +57,11 @@ defmodule Bittorrent.Torrent do
         in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
     }
   end
+
+  def update_with_piece_failed(torrent, piece_index) do
+    %Torrent{
+      torrent
+      | in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
+    }
+  end
 end

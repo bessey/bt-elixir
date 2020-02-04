@@ -8,7 +8,7 @@ defmodule Bittorrent.Client do
 
   @pieces_in_progress_path "_pieces"
   @tmp_extension ".tmp"
-  @max_connections 50
+  @max_connections 10
 
   def in_progress_path(), do: @pieces_in_progress_path
 
@@ -30,8 +30,8 @@ defmodule Bittorrent.Client do
     GenServer.call(__MODULE__, {:request_piece, piece_set})
   end
 
-  def piece_downloaded(piece_index, data) do
-    GenServer.call(__MODULE__, {:piece_downloaded, piece_index, data})
+  def piece_downloaded(piece, data) do
+    GenServer.call(__MODULE__, {:piece_downloaded, piece, data})
   end
 
   # Server (callbacks)
@@ -85,22 +85,34 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
-  def handle_call({:piece_downloaded, piece_index, data}, _from, torrent) do
-    Logger.debug("Piece downloaded: #{piece_index}")
+  def handle_call({:piece_downloaded, piece, data}, _from, torrent) do
+    Logger.debug("Piece downloaded: #{piece.number}")
 
-    {:reply,
-     File.write(
-       Path.join([
-         torrent.output_path,
-         @pieces_in_progress_path,
-         "#{piece_index}#{@tmp_extension}"
-       ]),
-       data
-     ),
-     Torrent.update_with_piece_downloaded(
-       torrent,
-       piece_index
-     )}
+    computed_sha = :crypto.hash(:sha, data)
+
+    if computed_sha == piece.sha do
+      {:reply,
+       File.write(
+         Path.join([
+           torrent.output_path,
+           @pieces_in_progress_path,
+           "#{piece.number}#{@tmp_extension}"
+         ]),
+         data
+       ),
+       Torrent.update_with_piece_downloaded(
+         torrent,
+         piece.number
+       )}
+    else
+      Logger.warn("Piece SHA failure #{piece.number}")
+
+      {:reply, {:error, :sha_mismatch},
+       Torrent.update_with_piece_failed(
+         torrent,
+         piece.number
+       )}
+    end
   end
 
   # Utilities
