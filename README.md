@@ -16,14 +16,13 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Send requests for blocks
 - Respect choke / unchoke
 - Respect interested / not interested
-- Save downloaded blocks to disk
+- Save downloaded pieces to disk
 - Dropped / timeout connection recovery
 - Get working as a script
 - Rearchitect focussing on one piece per peer
 
 ## To Do
 
-- Move peer assignment from pull to push
 - Store pieces in ETS / DETS / Mnesia
 - Listen for incoming connections
 - Send bitfield message on connection
@@ -32,11 +31,16 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Web UI
 
 ## Architecture
-The supervision tree is architected as follows:
 `Bittorrent` supervises one
 `Bittorrent.Client`, in charge of downloading the contents of a given .torrent file. It supervises N
-`Bittorrent.PeerDownloader`, who each are responsible for fetching an available peer from the `Client`. They each supervise a single
-`Task.Async`, which runs the TCP socket loop between themselves and the peer, fetching available blocks from the `Client` and reporting fetched blocks back to it.
+`Bittorrent.PeerDownloader`, who each are responsible for communications with a given peer.
+
+`Bittorrent.PeerDownloader` does all of the following forever:
+1. Fetching an available peer from the `Client`.
+2. Once a peer is acquired use a `Task` to establish connection to this peer asynchronously.
+3. Once a connection is established, fetch an available piece from the `Client`
+4. Once a piece is acquired, use a `Task` to run the TCP socket loop between themselves and the peer, fetching blocks of the piece until is complete, and is reported back to the `Client`.
+5. (Loop back to step 3)
 
 ## Installation
 
