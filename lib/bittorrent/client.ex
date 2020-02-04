@@ -30,6 +30,10 @@ defmodule Bittorrent.Client do
     GenServer.call(__MODULE__, {:request_piece, piece_set})
   end
 
+  def request_bitfield() do
+    GenServer.call(__MODULE__, {:request_bitfield})
+  end
+
   def piece_downloaded(piece, data) do
     GenServer.call(__MODULE__, {:piece_downloaded, piece, data})
   end
@@ -82,6 +86,11 @@ defmodule Bittorrent.Client do
     else
       {:reply, nil, torrent}
     end
+  end
+
+  @impl true
+  def handle_call({:request_bitfield}, _from, torrent) do
+    {:reply, {:ok, Peer.Protocol.pieces_to_bitfield(torrent.pieces)}, torrent}
   end
 
   @impl true

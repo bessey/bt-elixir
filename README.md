@@ -25,7 +25,6 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 
 - Store pieces in ETS / DETS / Mnesia
 - Listen for incoming connections
-- Send bitfield message on connection
 - Respond to requests for blocks (actually seed!)
 - Send have / cancel on completion of piece
 - Web UI

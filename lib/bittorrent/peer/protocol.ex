@@ -195,10 +195,30 @@ defmodule Bittorrent.Peer.Protocol do
 
     with :ok <- :gen_tcp.send(socket, handshake),
          {:ok, peer} <- receive_handshake(socket),
+         {:ok, peer} <- send_bitfield(peer, socket),
          # Hoping to receive a bitfield message so we know what pieces they have
          {:ok, peer} <- receive_message(peer, socket, 1000) do
       {:ok, peer}
     else
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  def send_bitfield(peer, socket) do
+    {:ok, <<bitfield::bytes>>} = Bittorrent.Client.request_bitfield()
+    bitfield_length = 1 + byte_size(bitfield)
+
+    Logger.debug("Send: bitfield")
+
+    case :gen_tcp.send(
+           socket,
+           <<bitfield_length::unsigned-integer-size(32), @msg_bitfield::unsigned-integer-size(8)>> <>
+             bitfield
+         ) do
+      :ok ->
+        {:ok, peer}
+
       {:error, _} = error ->
         error
     end
@@ -311,5 +331,14 @@ defmodule Bittorrent.Peer.Protocol do
     |> Enum.filter(fn {has_piece, _index} -> has_piece end)
     |> Enum.map(fn {_has_piece, index} -> index end)
     |> MapSet.new()
+  end
+
+  def pieces_to_bitfield(pieces) do
+    bitfield_without_padding = Enum.map(pieces, fn piece -> if piece.have, do: 1, else: 0 end)
+    # Bitfield must round up to the nearest byte, so we pad with 0s
+    pad_zero_bit_count = rem(length(bitfield_without_padding), 8)
+    pad_zero_bits = List.duplicate(0, pad_zero_bit_count)
+
+    (bitfield_without_padding ++ pad_zero_bits) |> :binary.list_to_bin()
   end
 end
