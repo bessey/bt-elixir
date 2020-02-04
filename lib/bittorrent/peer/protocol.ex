@@ -3,7 +3,7 @@ defmodule Bittorrent.Peer.Protocol do
   Functions for sending and receiving messages conforming to the BitTorrent Peer Protocol
   """
   require Logger
-  alias Bittorrent.{Peer.State, Peer.Buffer, Piece}
+  alias Bittorrent.{Peer.Connection, Peer.Buffer}
 
   @pstr "BitTorrent protocol"
   @pstrlen String.length(@pstr)
@@ -59,29 +59,29 @@ defmodule Bittorrent.Peer.Protocol do
 
   defp process_message(peer, @msg_choke, 1, _socket) do
     Logger.debug("Msg: choke")
-    {:ok, %State{peer | choked: true}}
+    {:ok, %Connection.State{peer | choked: true}}
   end
 
   defp process_message(peer, @msg_unchoke, 1, _socket) do
     Logger.debug("Msg: unchoke")
-    {:ok, %State{peer | choked: false}}
+    {:ok, %Connection.State{peer | choked: false}}
   end
 
   defp process_message(peer, @msg_interested, 1, _socket) do
     Logger.debug("Msg: interested")
-    {:ok, %State{peer | interested: true, choked: false}}
+    {:ok, %Connection.State{peer | interested: true, choked: false}}
   end
 
   defp process_message(peer, @msg_not_interested, 1, _socket) do
     Logger.debug("Msg: not interested")
-    {:ok, %State{peer | interested: false, choked: false}}
+    {:ok, %Connection.State{peer | interested: false, choked: false}}
   end
 
   defp process_message(peer, @msg_have, 5 = length, socket) do
     case :gen_tcp.recv(socket, length - 1) do
       {:ok, <<piece::unsigned-integer-size(32)>>} ->
         Logger.debug("Msg: have #{piece}")
-        {:ok, %State{State.have_piece(peer, piece) | choked: false}}
+        {:ok, %Connection.State{Connection.State.have_piece(peer, piece) | choked: false}}
 
       {:error, _} = error ->
         error
@@ -93,7 +93,7 @@ defmodule Bittorrent.Peer.Protocol do
       {:ok, <<bitfield::bits>>} ->
         piece_set = bitfield_to_piece_set(bitfield)
         Logger.debug("Msg: bitfield (#{MapSet.size(piece_set)} pieces)")
-        {:ok, %State{peer | piece_set: piece_set}}
+        {:ok, %Connection.State{peer | piece_set: piece_set}}
 
       {:error, _} = error ->
         error
@@ -118,7 +118,7 @@ defmodule Bittorrent.Peer.Protocol do
         Logger.debug("Msg: piece #{piece_we_want}: #{begin} (#{Buffer.progress(peer.buffer)})")
 
         {:ok,
-         %State{
+         %Connection.State{
            peer
            | requests_in_flight: peer.requests_in_flight - 1,
              buffer: Buffer.add_block(peer.buffer, begin, data)
@@ -176,7 +176,7 @@ defmodule Bittorrent.Peer.Protocol do
       Logger.metadata(peer: ez_peer_id)
 
       {:ok,
-       %State{
+       %Connection.State{
          name: to_string(pstr),
          reserved: reserved,
          info_hash: info_hash,
@@ -216,7 +216,7 @@ defmodule Bittorrent.Peer.Protocol do
          >>) do
       :ok ->
         {:ok,
-         %State{
+         %Connection.State{
            peer
            | requests_in_flight: peer.requests_in_flight + 1,
              buffer: Buffer.add_block(peer.buffer, begin, :in_flight)
@@ -235,7 +235,7 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_interested::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        {:ok, %State{peer | interested_in: true}}
+        {:ok, %Connection.State{peer | interested_in: true}}
 
       {:error, _} = error ->
         error
@@ -250,7 +250,7 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_not_interested::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        {:ok, %State{peer | interested_in: false}}
+        {:ok, %Connection.State{peer | interested_in: false}}
 
       {:error, _} = error ->
         error
@@ -265,7 +265,7 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_unchoke::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        {:ok, %State{peer | choking: false}}
+        {:ok, %Connection.State{peer | choking: false}}
 
       {:error, _} = error ->
         error
@@ -280,7 +280,7 @@ defmodule Bittorrent.Peer.Protocol do
            <<1::unsigned-integer-size(32), @msg_choke::unsigned-integer-size(8)>>
          ) do
       :ok ->
-        {:ok, %State{peer | choking: true}}
+        {:ok, %Connection.State{peer | choking: true}}
 
       {:error, _} = error ->
         error

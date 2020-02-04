@@ -5,7 +5,7 @@ defmodule Bittorrent.PeerDownloader do
 
   require Logger
   use GenServer
-  alias Bittorrent.{Client, Peer, Peer}
+  alias Bittorrent.{Client, Peer.Connection}
 
   defmodule State do
     defstruct [
@@ -19,7 +19,7 @@ defmodule Bittorrent.PeerDownloader do
     ]
   end
 
-  @type peer() :: %Peer.State{} | nil
+  @type peer() :: %Connection.State{} | nil
   @type peer_downloader() :: %State{
           peer: peer()
         }
@@ -121,7 +121,7 @@ defmodule Bittorrent.PeerDownloader do
     pid = self()
 
     Task.async(fn ->
-      case Peer.connect(
+      case Connection.connect(
              state.address,
              state.info_sha,
              state.peer_id
@@ -143,7 +143,7 @@ defmodule Bittorrent.PeerDownloader do
       Logger.metadata(peer: Base.encode64(state.peer.id))
       Logger.debug("Peer: downloading piece #{state.peer.piece.number}")
 
-      case Peer.download_loop(state.peer, state.socket) do
+      case Connection.download_loop(state.peer, state.socket) do
         {:error, reason} ->
           {:error, state.address, reason}
 
@@ -173,7 +173,7 @@ defmodule Bittorrent.PeerDownloader do
   defp process_piece(piece, state) do
     state = %State{
       state
-      | peer: %Peer.State{state.peer | piece: piece}
+      | peer: %Connection.State{state.peer | piece: piece}
     }
 
     start_download_piece_task(state)
@@ -184,7 +184,7 @@ defmodule Bittorrent.PeerDownloader do
     state = %State{
       state
       | address: request_peer(),
-        peer: state.peer && %Peer.State{state.peer | piece: nil},
+        peer: state.peer && %Connection.State{state.peer | piece: nil},
         socket: nil
     }
 

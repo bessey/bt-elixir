@@ -1,4 +1,4 @@
-defmodule Bittorrent.Peer do
+defmodule Bittorrent.Peer.Connection do
   @moduledoc """
   The guts of meaningfully communicating with a Peer we are connected to; leverage the protocol to get a peer
   to send us the pieces we need.
@@ -6,6 +6,7 @@ defmodule Bittorrent.Peer do
 
   alias Bittorrent.Peer.{Protocol, Buffer}
   alias Bittorrent.Piece
+  alias Bittorrent.Peer.Connection
   require Logger
 
   defmodule State do
@@ -30,7 +31,10 @@ defmodule Bittorrent.Peer do
     ]
 
     def have_piece(peer, piece) do
-      %Bittorrent.Peer.State{peer | piece_set: MapSet.put(peer.piece_set, piece)}
+      %Connection.State{
+        peer
+        | piece_set: MapSet.put(peer.piece_set, piece)
+      }
     end
   end
 
