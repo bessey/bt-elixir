@@ -6,6 +6,8 @@ defmodule Bittorrent.Piece do
   alias Bittorrent.Piece
 
   @block_size :math.pow(2, 14) |> round
+  @pieces_in_progress_path "_pieces"
+  @tmp_extension ".tmp"
 
   defstruct [:sha, :size, :number, have: false]
 
@@ -51,5 +53,41 @@ defmodule Bittorrent.Piece do
     begin = index * @block_size
     block_size = min(@block_size, piece.size - begin)
     {piece.number, begin, block_size}
+  end
+
+  # File Utils
+
+  def path_for_piece(output_path, number) do
+    Path.join([
+      in_progress_path(output_path),
+      "#{number}#{@tmp_extension}"
+    ])
+  end
+
+  def in_progress_path(output_path) do
+    Path.join([
+      output_path,
+      @pieces_in_progress_path
+    ])
+  end
+
+  def store_data(piece, data, output_path) do
+    computed_sha = :crypto.hash(:sha, data)
+
+    if computed_sha == piece.sha do
+      File.write(path_for_piece(output_path, piece.number), data)
+    else
+      {:error, :sha_mismatch}
+    end
+  end
+
+  def stored_piece_numbers(output_path) do
+    tmp_extension_index = -(String.length(@tmp_extension) + 1)
+
+    {:ok, existing_pieces} = File.ls(in_progress_path(output_path))
+
+    existing_pieces
+    |> Enum.map(&String.slice(&1, 0..tmp_extension_index))
+    |> Enum.map(&String.to_integer/1)
   end
 end

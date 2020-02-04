@@ -4,9 +4,8 @@ defmodule Bittorrent.Peer.Connection do
   to send us the pieces we need.
   """
 
-  alias Bittorrent.Peer.{Protocol, Buffer}
-  alias Bittorrent.Piece
-  alias Bittorrent.Peer.Connection
+  alias Bittorrent.{Piece, Client}
+  alias Bittorrent.Peer.{Protocol, Buffer, Connection}
   require Logger
 
   defmodule State do
@@ -21,6 +20,7 @@ defmodule Bittorrent.Peer.Connection do
       # Their feelings for us
       choked: true,
       interested: false,
+      pending_requests: [],
       # Our feelings for them
       choking: true,
       interested_in: false,
@@ -67,17 +67,18 @@ defmodule Bittorrent.Peer.Connection do
     end
   end
 
-  def download_loop(peer, socket, timeout \\ :infinity) do
+  def main_loop(peer, socket, timeout \\ :infinity) do
     peer = %State{peer | buffer: peer.buffer || Buffer.init(peer.piece)}
 
     with {:ok, peer} <- request_until_pipeline_full(peer, socket),
+         {:ok, peer} <- fulfill_requests_until_queue_empty(peer, socket),
          {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
          {:ok, peer} <- receive_until_buffer_empty(peer, socket) do
       if Buffer.complete?(peer.buffer) do
         Logger.debug("Finished building piece #{peer.piece.number}")
         {:ok, Buffer.to_binary(peer.buffer), %State{peer | buffer: nil, piece: nil}}
       else
-        download_loop(peer, socket)
+        main_loop(peer, socket)
       end
     else
       error -> error
@@ -96,6 +97,23 @@ defmodule Bittorrent.Peer.Connection do
         error
     end
   end
+
+  defp fulfill_requests_until_queue_empty(
+         %State{choked: false, pending_requests: [request | tail]} = peer,
+         socket
+       ) do
+    {:ok, request} = Client.request_data(request)
+
+    case Protocol.send_piece(peer, socket, request) do
+      {:ok, peer} ->
+        fulfill_requests_until_queue_empty(%State{peer | pending_requests: tail}, socket)
+
+      error ->
+        error
+    end
+  end
+
+  defp fulfill_requests_until_queue_empty(peer, _socket), do: {:ok, peer}
 
   # If we are choking we cannot send messages until we tell the peer we are unchoked
   defp request_until_pipeline_full(%State{choking: true} = peer, socket) do

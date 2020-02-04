@@ -20,12 +20,13 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Dropped / timeout connection recovery
 - Get working as a script
 - Rearchitect focussing on one piece per peer
+- Respond to requests for blocks (actually seed!)
 
 ## To Do
 
+- Assemble the pieces into an actual file
 - Store pieces in ETS / DETS / Mnesia
 - Listen for incoming connections
-- Respond to requests for blocks (actually seed!)
 - Send have / cancel on completion of piece
 - Web UI
 

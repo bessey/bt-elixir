@@ -52,7 +52,7 @@ defmodule Bittorrent do
 
   defp prepare_output(output_path) do
     File.mkdir_p!(output_path)
-    File.mkdir_p!(Path.join([output_path, Client.in_progress_path()]))
+    File.mkdir_p!(Bittorrent.Piece.in_progress_path(output_path))
   end
 
   defp exit_when_process_exits(pid) do

@@ -143,7 +143,7 @@ defmodule Bittorrent.PeerDownloader do
       Logger.metadata(peer: Base.encode64(state.peer.id))
       Logger.debug("Peer: downloading piece #{state.peer.piece.number}")
 
-      case Connection.download_loop(state.peer, state.socket) do
+      case Connection.main_loop(state.peer, state.socket) do
         {:error, reason} ->
           {:error, state.address, reason}
 

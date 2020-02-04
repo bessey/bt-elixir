@@ -4,13 +4,9 @@ defmodule Bittorrent.Client do
   """
   require Logger
   use GenServer
-  alias Bittorrent.{Torrent, Peer, PeerDownloader}
+  alias Bittorrent.{Torrent, Peer, PeerDownloader, Piece}
 
-  @pieces_in_progress_path "_pieces"
-  @tmp_extension ".tmp"
   @max_connections 10
-
-  def in_progress_path(), do: @pieces_in_progress_path
 
   # Client
 
@@ -28,6 +24,10 @@ defmodule Bittorrent.Client do
 
   def request_piece(piece_set) do
     GenServer.call(__MODULE__, {:request_piece, piece_set})
+  end
+
+  def request_data(%Peer.Request{} = request) do
+    GenServer.call(__MODULE__, {:request_data, request})
   end
 
   def request_bitfield() do
@@ -65,6 +65,11 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
+  def handle_call({:request_data, %Peer.Request{} = request}, _from, torrent) do
+    {:reply, {:ok, data_for_request(request, torrent)}, torrent}
+  end
+
+  @impl true
   def handle_call({:return_peer, address}, _from, torrent) do
     peers_with_returned = :queue.in(address, torrent.peers)
 
@@ -97,30 +102,21 @@ defmodule Bittorrent.Client do
   def handle_call({:piece_downloaded, piece, data}, _from, torrent) do
     Logger.debug("Piece downloaded: #{piece.number}")
 
-    computed_sha = :crypto.hash(:sha, data)
+    case Piece.store_data(piece, data, torrent.output_path) do
+      :ok ->
+        Torrent.update_with_piece_downloaded(
+          torrent,
+          piece.number
+        )
 
-    if computed_sha == piece.sha do
-      {:reply,
-       File.write(
-         Path.join([
-           torrent.output_path,
-           @pieces_in_progress_path,
-           "#{piece.number}#{@tmp_extension}"
-         ]),
-         data
-       ),
-       Torrent.update_with_piece_downloaded(
-         torrent,
-         piece.number
-       )}
-    else
-      Logger.warn("Piece SHA failure #{piece.number}")
+      {:error, :sha_mismatch} ->
+        Logger.warn("Piece SHA failure #{piece.number}")
 
-      {:reply, {:error, :sha_mismatch},
-       Torrent.update_with_piece_failed(
-         torrent,
-         piece.number
-       )}
+        {:reply, {:error, :sha_mismatch},
+         Torrent.update_with_piece_failed(
+           torrent,
+           piece.number
+         )}
     end
   end
 
@@ -141,15 +137,8 @@ defmodule Bittorrent.Client do
   end
 
   defp restore_from_progress(torrent) do
-    pieces_path = Path.join([torrent.output_path, @pieces_in_progress_path])
-    tmp_extension_index = -(String.length(@tmp_extension) + 1)
-
-    {:ok, existing_pieces} = File.ls(pieces_path)
-
     state =
-      existing_pieces
-      |> Enum.map(&String.slice(&1, 0..tmp_extension_index))
-      |> Enum.map(&String.to_integer/1)
+      Piece.stored_piece_numbers(torrent.output_path)
       |> Enum.reduce(torrent, fn piece_index, torrent ->
         Torrent.update_with_piece_downloaded(torrent, piece_index)
       end)
@@ -161,6 +150,14 @@ defmodule Bittorrent.Client do
     )
 
     state
+  end
+
+  defp data_for_request(request, torrent) do
+    piece_path = Piece.path_for_piece(torrent.output_path, request.piece)
+    {:ok, file} = :file.open(piece_path, [:read, :binary])
+    {:ok, contents} = :file.pread(file, request.begin, request.block_size)
+    :file.close(file)
+    contents
   end
 
   defp build_child(index, peer, torrent) do
