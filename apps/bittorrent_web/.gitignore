@@ -20,11 +20,15 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-bittorrent-*.tar
+bittorrent_web-*.tar
 
-apps/bittorrent/test/output
+# If NPM crashes, it generates a log, let's ignore it too.
+npm-debug.log
 
-/.elixir_ls
+# The directory NPM downloads your dependencies sources to.
+/assets/node_modules/
 
-# Dont version a whole Elixir binary
-/bittorrent
+# Since we are building assets from web/static,
+# we ignore priv/static. You may want to comment
+# this depending on your deployment strategy.
+/priv/static/
