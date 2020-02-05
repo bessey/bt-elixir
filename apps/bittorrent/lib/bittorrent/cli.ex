@@ -5,7 +5,7 @@ defmodule Bittorrent.CLI do
 
   def main(args) do
     [file: file_path, output: output_path] = parse_args(args)
-    Bittorrent.download(file_path, output_path)
+    Bittorrent.Worker.download(file_path, output_path)
   end
 
   defp parse_args(args) do

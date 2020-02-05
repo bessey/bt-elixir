@@ -1,11 +1,31 @@
-defmodule Bittorrent do
+defmodule Bittorrent.Worker do
   @port 6881
   require Logger
   alias Bittorrent.{Torrent, TorrentFile, Client}
 
+  use GenServer
+
   @moduledoc """
   BitTorrent File Downloader.
   """
+  # Client
+
+  def start_link(_state) do
+    GenServer.start_link(__MODULE__, nil)
+  end
+
+  # Server
+
+  @impl true
+  def init(_state) do
+    {:ok, Task.async(fn ->
+      download(
+        "/Users/matt/Dev/bt-elixir/apps/bittorrent/test/archlinux-2020.01.01-x86_64.iso.torrent",
+        "/Users/matt/Dev/bt-elixir/apps/bittorrent/test/output/_pieces"
+      )
+    end)}
+  end
+
 
   @doc """
   Download the given Torrent to the given directory.

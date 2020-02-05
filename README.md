@@ -26,11 +26,13 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 
 ## To Do
 
+- Re-announce to the tracker at a given interval
+- Web UI for viewing torrent status
+- Web UI for uploading a new torrent
 - Assemble the pieces into an actual file
 - Store pieces in ETS / DETS / Mnesia
 - Listen for incoming connections
 - Send have / cancel on completion of piece
-- Web UI
 
 ## Architecture
 `Bittorrent` supervises one

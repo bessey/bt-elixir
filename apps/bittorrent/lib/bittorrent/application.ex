@@ -7,8 +7,10 @@ defmodule Bittorrent.Application do
 
   def start(_type, _args) do
     children = [
-      # Bittorrent.Worker
+      Bittorrent.Worker
     ]
+
+    IO.puts("TESTING")
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Bittorrent.Supervisor)
   end
