@@ -41,6 +41,8 @@ defmodule BittorrentWeb.MixProject do
       {:phoenix_pubsub, "~> 1.1"},
       {:phoenix_html, "~> 2.11"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
+      {:floki, ">= 0.0.0", only: :test},
+      {:phoenix_live_view, "~> 0.5.1"},
       {:gettext, "~> 0.11"},
       {:bittorrent, in_umbrella: true},
       {:jason, "~> 1.0"},

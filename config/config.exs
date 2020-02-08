@@ -19,7 +19,10 @@ config :bittorrent_web, BittorrentWeb.Endpoint,
   url: [host: "localhost"],
   secret_key_base: "jNPg5GMRLxZAK+WAOw7EBlrYhzRpz15H6R4v7tHCz749LLMOBLjGQ7U39N0vnGHe",
   render_errors: [view: BittorrentWeb.ErrorView, accepts: ~w(html json)],
-  pubsub: [name: BittorrentWeb.PubSub, adapter: Phoenix.PubSub.PG2]
+  pubsub: [name: BittorrentWeb.PubSub, adapter: Phoenix.PubSub.PG2],
+  live_view: [
+    signing_salt: "3+iotS4LJXd15GPzWBDBUhVnE4JgvEnD"
+  ]
 
 # Configures Elixir's Logger
 config :logger, :console,

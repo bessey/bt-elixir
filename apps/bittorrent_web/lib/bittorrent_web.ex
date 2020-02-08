@@ -22,6 +22,7 @@ defmodule BittorrentWeb do
       use Phoenix.Controller, namespace: BittorrentWeb
       import Plug.Conn
       import BittorrentWeb.Gettext
+      import Phoenix.LiveView.Controller
       alias BittorrentWeb.Router.Helpers, as: Routes
     end
   end
@@ -40,6 +41,7 @@ defmodule BittorrentWeb do
 
       import BittorrentWeb.ErrorHelpers
       import BittorrentWeb.Gettext
+      import Phoenix.LiveView.Helpers
       alias BittorrentWeb.Router.Helpers, as: Routes
     end
   end
@@ -49,6 +51,7 @@ defmodule BittorrentWeb do
       use Phoenix.Router
       import Plug.Conn
       import Phoenix.Controller
+      import Phoenix.LiveView.Router
     end
   end
 
