@@ -9,8 +9,6 @@
 # move said applications out of the umbrella.
 use Mix.Config
 
-
-
 config :bittorrent_web,
   generators: [context_app: :bittorrent]
 
@@ -21,7 +19,8 @@ config :bittorrent_web, BittorrentWeb.Endpoint,
   render_errors: [view: BittorrentWeb.ErrorView, accepts: ~w(html json)],
   pubsub: [name: BittorrentWeb.PubSub, adapter: Phoenix.PubSub.PG2],
   live_view: [
-    signing_salt: "3+iotS4LJXd15GPzWBDBUhVnE4JgvEnD"
+    # TODO this needs DRYing up
+    signing_salt: "FW6+oVsv"
   ]
 
 # Configures Elixir's Logger

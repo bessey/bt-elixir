@@ -7,8 +7,9 @@
   <h1>Torrent Info</h1>
   <h2>Downloading Pieces</h2>
   <p>
-  <%= in_progress_pieces() |> Enum.map(&to_string/1)|> Enum.join(", ") %>
+  <%= @in_progress_pieces |> Enum.map(&to_string/1)|> Enum.join(", ") %>
+  </p>
   <p>
-    <%= torrent_debug() %>
+    <%= @torrent_debug %>
   </p>
 </main>

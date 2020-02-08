@@ -17,7 +17,7 @@ defmodule BittorrentWeb.Router do
   scope "/", BittorrentWeb do
     pipe_through :browser
 
-    get "/", PageController, :index
+    live "/", IndexLive
   end
 
   # Other scopes may use custom stacks.
