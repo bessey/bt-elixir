@@ -50,14 +50,15 @@ defmodule Bittorrent.Client do
 
     torrent = restore_from_progress(torrent)
 
-    {torrent, child_processes} = if max_conns > 0 do
-      Enum.reduce(1..max_conns, {torrent, []}, fn index, {torrent, children} ->
-        {peer, torrent} = handle_request_peer(torrent)
-        {torrent, [build_child(index, peer, torrent) | children]}
-      end)
-    else
-      {torrent, []}
-    end
+    {torrent, child_processes} =
+      if max_conns > 0 do
+        Enum.reduce(1..max_conns, {torrent, []}, fn index, {torrent, children} ->
+          {peer, torrent} = handle_request_peer(torrent)
+          {torrent, [build_child(index, peer, torrent) | children]}
+        end)
+      else
+        {torrent, []}
+      end
 
     {:ok, _} = Supervisor.start_link(child_processes, strategy: :one_for_one)
 
@@ -68,7 +69,7 @@ defmodule Bittorrent.Client do
   def handle_call({:request_peer}, _from, torrent) do
     {assigned_peer, state} = handle_request_peer(torrent)
 
-    {:reply, {:ok, assigned_peer}, state}
+    {:reply, {:ok, assigned_peer}, state |> broadcast_state()}
   end
 
   @impl true
@@ -80,11 +81,16 @@ defmodule Bittorrent.Client do
   def handle_call({:return_peer, address}, _from, torrent) do
     peers_with_returned = :queue.in(address, torrent.peers)
 
+    connected_peers =
+      Enum.reject(torrent.connected_peers, &(&1.ip === address.ip && &1.port === address.port))
+
     {:reply, :ok,
      %Torrent{
        torrent
-       | peers: peers_with_returned
-     }}
+       | peers: peers_with_returned,
+         connected_peers: connected_peers
+     }
+     |> broadcast_state()}
   end
 
   @impl true
@@ -94,7 +100,8 @@ defmodule Bittorrent.Client do
 
     if piece do
       {:reply, piece,
-       %Torrent{torrent | in_progress_pieces: [piece.number | torrent.in_progress_pieces]}}
+       %Torrent{torrent | in_progress_pieces: [piece.number | torrent.in_progress_pieces]}
+       |> broadcast_state()}
     else
       {:reply, nil, torrent}
     end
@@ -115,7 +122,8 @@ defmodule Bittorrent.Client do
          Torrent.update_with_piece_downloaded(
            torrent,
            piece.number
-         )}
+         )
+         |> broadcast_state()}
 
       {:error, :sha_mismatch} ->
         Logger.warn("Piece SHA failure #{piece.number}")
@@ -141,7 +149,8 @@ defmodule Bittorrent.Client do
         {assigned_peer,
          %Torrent{
            torrent
-           | peers: remaining_peers
+           | peers: remaining_peers,
+             connected_peers: [assigned_peer | torrent.connected_peers]
          }}
 
       {:empty, _} ->
@@ -186,5 +195,10 @@ defmodule Bittorrent.Client do
            }
          ]}
     }
+  end
+
+  defp broadcast_state(torrent) do
+    BittorrentWeb.Endpoint.broadcast("torrents", "update", torrent)
+    torrent
   end
 end

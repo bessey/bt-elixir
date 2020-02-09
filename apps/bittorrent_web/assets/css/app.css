@@ -1,4 +1,19 @@
 /* This file is for your main application css. */
 
-@import "./phoenix.css";
 @import "../../../../deps/phoenix_live_view/assets/css/live_view.css";
+
+.pieces {
+  display: inline-block;
+  border: 0.05rem solid limegreen;
+  padding: 0;
+  margin: 0;
+  line-height: 0rem;
+}
+.piece {
+  display: inline-block;
+  width: 0.5px;
+  height: 2rem;
+}
+.piece-have-true {
+  background-color: lightgreen;
+}

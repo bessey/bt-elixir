@@ -20,6 +20,7 @@ defmodule Bittorrent.Torrent do
     uploaded: 0,
     downloaded: 0,
     peers: :queue.new(),
+    connected_peers: [],
     in_progress_pieces: []
   ]
 
@@ -51,11 +52,13 @@ defmodule Bittorrent.Torrent do
         end
       end)
 
-    %Torrent{
+    torrent = %Torrent{
       torrent
       | pieces: pieces,
         in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
     }
+
+    torrent
   end
 
   def update_with_piece_failed(torrent, piece_index) do

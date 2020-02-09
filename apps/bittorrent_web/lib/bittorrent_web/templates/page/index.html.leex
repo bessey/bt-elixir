@@ -1,15 +1,19 @@
-<style>
-  body {
-    font-size: 24px;
-  }
-</style>
 <main>
-  <h1>Torrent Info</h1>
+  <h2>Connected to Peers</h2>
+  <p>
+  <%= for peer <- @torrent_state.connected_peers do %>
+    <%= peer.ip %>:<%= peer.port %>
+    <br/>
+  <% end %>
+  </p>
   <h2>Downloading Pieces</h2>
   <p>
   <%= @in_progress_pieces |> Enum.map(&to_string/1)|> Enum.join(", ") %>
   </p>
+
+  <h2>Completion</h2>
   <p>
-    <%= @torrent_debug %>
+    Downloaded <%= @torrent_completion %>
   </p>
+  <div class="pieces"><%= for piece <- @torrent_state.pieces |> Enum.map(& &1.have) do %><span class="piece piece-have-<%= piece %>"></span><% end %></div>
 </main>
