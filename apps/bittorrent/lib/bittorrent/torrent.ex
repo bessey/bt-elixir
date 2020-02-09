@@ -20,8 +20,7 @@ defmodule Bittorrent.Torrent do
     uploaded: 0,
     downloaded: 0,
     peers: :queue.new(),
-    peer_downloaders: %{},
-    in_progress_pieces: []
+    peer_downloaders: %{}
   ]
 
   alias Bittorrent.{Torrent, TrackerInfo, Piece}
@@ -39,32 +38,19 @@ defmodule Bittorrent.Torrent do
     torrent.pieces
     |> Enum.reject(fn our_piece -> our_piece.have end)
     |> Enum.filter(fn our_piece -> MapSet.member?(their_piece_set, our_piece.number) end)
-    |> Enum.reject(fn our_piece -> Enum.member?(torrent.in_progress_pieces, our_piece.number) end)
+    |> Enum.reject(fn our_piece ->
+      Enum.member?(piece_numbers_in_flight(torrent), our_piece.number)
+    end)
+  end
+
+  defp piece_numbers_in_flight(torrent) do
+    torrent.peer_downloaders
+    |> Map.values()
+    |> Enum.map(&(&1.peer && &1.peer.piece && &1.peer.piece && &1.peer.piece.number))
+    |> Enum.filter(& &1)
   end
 
   def update_with_piece_downloaded(torrent, piece_index) do
-    pieces =
-      Enum.map(torrent.pieces, fn piece ->
-        if piece.number == piece_index do
-          Piece.complete(piece)
-        else
-          piece
-        end
-      end)
-
-    torrent = %Torrent{
-      torrent
-      | pieces: pieces,
-        in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
-    }
-
-    torrent
-  end
-
-  def update_with_piece_failed(torrent, piece_index) do
-    %Torrent{
-      torrent
-      | in_progress_pieces: Enum.reject(torrent.in_progress_pieces, &(&1 == piece_index))
-    }
+    %Torrent{torrent | pieces: List.update_at(torrent.pieces, piece_index, &Piece.complete(&1))}
   end
 end

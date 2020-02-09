@@ -26,17 +26,12 @@ defmodule BittorrentWeb.IndexLive do
   defp build_assigns_from_state(state, socket) do
     assign(socket,
       torrent_state: state,
-      in_progress_pieces: in_progress_pieces(state),
       torrent_completion: completion(state)
     )
   end
 
   defp torrent_state() do
     Bittorrent.Client.get()
-  end
-
-  defp in_progress_pieces(torrent_state) do
-    torrent_state.in_progress_pieces
   end
 
   defp completion(torrent_state) do

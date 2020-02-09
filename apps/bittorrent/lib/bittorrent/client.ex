@@ -99,14 +99,18 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
-  def handle_call({:request_piece, piece_set}, _from, torrent) do
+  def handle_call({:request_piece, piece_set}, {from_pid, _}, torrent) do
     pieces = Torrent.pieces_we_need_that_peer_has(torrent, piece_set)
     piece = pieces |> Enum.shuffle() |> List.first()
 
     if piece do
-      {:reply, piece,
-       %Torrent{torrent | in_progress_pieces: [piece.number | torrent.in_progress_pieces]}
-       |> broadcast_state()}
+      {
+        :reply,
+        piece,
+        # Pre-update the peer's state with the piece so we don't give it to another peer before they next update the state themselves
+        put_in(torrent.peer_downloaders[from_pid].peer.piece, piece)
+        |> broadcast_state()
+      }
     else
       {:reply, nil, torrent}
     end
@@ -133,11 +137,7 @@ defmodule Bittorrent.Client do
       {:error, :sha_mismatch} ->
         Logger.warn("Piece SHA failure #{piece.number}")
 
-        {:reply, {:error, :sha_mismatch},
-         Torrent.update_with_piece_failed(
-           torrent,
-           piece.number
-         )}
+        {:reply, {:error, :sha_mismatch}, torrent}
     end
   end
 

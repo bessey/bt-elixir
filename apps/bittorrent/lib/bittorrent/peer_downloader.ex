@@ -47,17 +47,15 @@ defmodule Bittorrent.PeerDownloader do
     Logger.debug("PeerDownloader: connected")
     Logger.metadata(peer: Base.encode64(peer.id))
 
+    state = %State{
+      state
+      | peer: peer,
+        socket: socket
+    }
+
     Client.update_peer_downloader(state)
 
-    state =
-      %State{
-        state
-        | peer: peer,
-          socket: socket
-      }
-      |> request_piece()
-
-    {:noreply, state}
+    {:noreply, state |> request_piece()}
   end
 
   @impl true
