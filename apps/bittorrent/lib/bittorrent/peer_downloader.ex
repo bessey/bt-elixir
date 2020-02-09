@@ -8,15 +8,9 @@ defmodule Bittorrent.PeerDownloader do
   alias Bittorrent.{Client, Peer.Connection}
 
   defmodule State do
-    defstruct [
-      # Torrent Info
-      :info_sha,
-      :peer_id,
-      # Peer State
-      address: nil,
-      peer: nil,
-      socket: nil
-    ]
+    defstruct address: nil,
+              peer: nil,
+              socket: nil
   end
 
   @type peer() :: %Connection.State{} | nil
@@ -26,28 +20,22 @@ defmodule Bittorrent.PeerDownloader do
 
   # Client
 
-  def start_link({info_sha, peer_id, address}) do
-    GenServer.start_link(__MODULE__, {info_sha, peer_id, address})
+  def start_link(address) do
+    GenServer.start_link(__MODULE__, address)
   end
 
   # Server
 
   @impl true
-  def init({info_sha, peer_id, nil}) do
+  def init(nil) do
     sleep()
 
-    {:ok,
-     %State{
-       info_sha: info_sha,
-       peer_id: peer_id
-     }}
+    {:ok, %State{}}
   end
 
   @impl true
-  def init({info_sha, peer_id, address}) do
+  def init(address) do
     state = %State{
-      info_sha: info_sha,
-      peer_id: peer_id,
       address: address
     }
 
@@ -121,10 +109,12 @@ defmodule Bittorrent.PeerDownloader do
     pid = self()
 
     Task.async(fn ->
+      %{info_sha: info_sha, peer_id: peer_id} = Bittorrent.Client.get()
+
       case Connection.connect(
              state.address,
-             state.info_sha,
-             state.peer_id
+             info_sha,
+             peer_id
            ) do
         {:ok, connected_peer, socket} ->
           # Hand ownership to the PeerDownloader so the socket isn't closed by the Task ending

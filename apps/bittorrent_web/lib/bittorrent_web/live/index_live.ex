@@ -32,8 +32,7 @@ defmodule BittorrentWeb.IndexLive do
   end
 
   defp torrent_state() do
-    {:ok, state} = Bittorrent.Client.get_state()
-    state
+    Bittorrent.Client.get()
   end
 
   defp in_progress_pieces(torrent_state) do

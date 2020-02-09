@@ -6,7 +6,7 @@ defmodule Bittorrent.Client do
   use GenServer
   alias Bittorrent.{Torrent, Peer, PeerDownloader, Piece}
 
-  @max_connections 5
+  @max_connections 15
 
   # Client
 
@@ -38,8 +38,8 @@ defmodule Bittorrent.Client do
     GenServer.call(__MODULE__, {:piece_downloaded, piece, data})
   end
 
-  def get_state() do
-    GenServer.call(__MODULE__, {:get_state})
+  def get(fun \\ fn x -> x end) do
+    GenServer.call(__MODULE__, {:get, fun})
   end
 
   # Server (callbacks)
@@ -54,7 +54,7 @@ defmodule Bittorrent.Client do
       if max_conns > 0 do
         Enum.reduce(1..max_conns, {torrent, []}, fn index, {torrent, children} ->
           {peer, torrent} = handle_request_peer(torrent)
-          {torrent, [build_child(index, peer, torrent) | children]}
+          {torrent, [build_child(index, peer) | children]}
         end)
       else
         {torrent, []}
@@ -137,8 +137,8 @@ defmodule Bittorrent.Client do
   end
 
   @impl true
-  def handle_call({:get_state}, _from, torrent) do
-    {:reply, {:ok, torrent}, torrent}
+  def handle_call({:get, getter_fn}, _from, torrent) do
+    {:reply, getter_fn.(torrent), torrent}
   end
 
   # Utilities
@@ -182,18 +182,10 @@ defmodule Bittorrent.Client do
     contents
   end
 
-  defp build_child(index, peer, torrent) do
+  defp build_child(index, peer) do
     %{
       id: index,
-      start:
-        {PeerDownloader, :start_link,
-         [
-           {
-             torrent.info_sha,
-             torrent.peer_id,
-             peer
-           }
-         ]}
+      start: {PeerDownloader, :start_link, [peer]}
     }
   end
 
