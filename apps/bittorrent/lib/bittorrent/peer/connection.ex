@@ -67,18 +67,20 @@ defmodule Bittorrent.Peer.Connection do
     end
   end
 
-  def main_loop(peer, socket, timeout \\ :infinity) do
+  def main_loop(peer, socket, peer_downloader_pid, timeout \\ :infinity) do
     peer = %State{peer | buffer: peer.buffer || Buffer.init(peer.piece)}
 
     with {:ok, peer} <- request_until_pipeline_full(peer, socket),
          {:ok, peer} <- fulfill_requests_until_queue_empty(peer, socket),
          {:ok, peer} <- Protocol.receive_message(peer, socket, timeout),
          {:ok, peer} <- receive_until_buffer_empty(peer, socket) do
+      Client.update_peer_downloader(&(&1 && Map.put(&1, :peer, peer)), peer_downloader_pid)
+
       if Buffer.complete?(peer.buffer) do
         Logger.debug("Finished building piece #{peer.piece.number}")
         {:ok, Buffer.to_binary(peer.buffer), %State{peer | buffer: nil, piece: nil}}
       else
-        main_loop(peer, socket)
+        main_loop(peer, socket, peer_downloader_pid)
       end
     else
       error -> error

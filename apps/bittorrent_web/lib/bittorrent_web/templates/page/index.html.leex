@@ -4,10 +4,13 @@
   }
 </style>
 <main>
-  <h2>Connected to Peers</h2>
+  <h2>Peer Downloaders</h2>
   <p>
-  <%= for peer <- @torrent_state.connected_peers do %>
-    <%= peer.ip %>:<%= peer.port %>
+  <%= for peer_downloader <- @torrent_state.peer_downloaders |> Map.values()  do %>
+    <%= peer_downloader.address.ip %>:<%= peer_downloader.address.port %>
+    <%= if peer_downloader.peer do %>
+      - Piece: <%= peer_downloader.peer.piece.number %>
+    <% end %>
     <br/>
   <% end %>
   </p>

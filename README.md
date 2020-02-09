@@ -5,6 +5,7 @@
 A work in progress implementation of the [BitTorrent Specification](https://wiki.theory.org/index.php/BitTorrentSpecification#Info_Dictionary) as a method to learn Elixir. Inspired by [Building a BitTorrent client from the ground up in Go](https://blog.jse.li/posts/torrent/).
 
 ## Usage
+
 ```sh
 > mix escript.build
 > ./bittorrent --path ./my.torrent --output ./my_torrents/
@@ -23,11 +24,11 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Get working as a script
 - Rearchitect focussing on one piece per peer
 - Respond to requests for blocks (actually seed!)
+- Web UI for viewing torrent status
 
 ## To Do
 
 - Re-announce to the tracker at a given interval
-- Web UI for viewing torrent status
 - Web UI for uploading a new torrent
 - Assemble the pieces into an actual file
 - Store pieces in ETS / DETS / Mnesia
@@ -35,11 +36,13 @@ A work in progress implementation of the [BitTorrent Specification](https://wiki
 - Send have / cancel on completion of piece
 
 ## Architecture
+
 `Bittorrent` supervises one
 `Bittorrent.Client`, in charge of downloading the contents of a given .torrent file. It supervises N
 `Bittorrent.PeerDownloader`, who each are responsible for communications with a given peer.
 
 `Bittorrent.PeerDownloader` does all of the following forever:
+
 1. Fetching an available peer from the `Client`.
 2. Once a peer is acquired use a `Task` to establish connection to this peer asynchronously.
 3. Once a connection is established, fetch an available piece from the `Client`
@@ -62,4 +65,3 @@ end
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at [https://hexdocs.pm/bittorrent](https://hexdocs.pm/bittorrent).
-

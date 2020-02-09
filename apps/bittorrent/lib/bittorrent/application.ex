@@ -10,7 +10,7 @@ defmodule Bittorrent.Application do
       Bittorrent.Worker
     ]
 
-    IO.puts("TESTING")
+    :observer.start()
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Bittorrent.Supervisor)
   end

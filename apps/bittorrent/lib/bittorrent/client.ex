@@ -42,6 +42,18 @@ defmodule Bittorrent.Client do
     GenServer.call(__MODULE__, {:get, fun})
   end
 
+  @spec update_peer_downloader(
+          PeerDownloader.State
+          | (PeerDownloader.State -> PeerDownloader.State),
+          pid()
+        ) :: nil
+  def update_peer_downloader(new_state_or_update_fn, peer_downloader_pid \\ nil) do
+    GenServer.call(
+      __MODULE__,
+      {:update_peer_downloader, new_state_or_update_fn, peer_downloader_pid}
+    )
+  end
+
   # Server (callbacks)
 
   @impl true
@@ -81,15 +93,8 @@ defmodule Bittorrent.Client do
   def handle_call({:return_peer, address}, _from, torrent) do
     peers_with_returned = :queue.in(address, torrent.peers)
 
-    connected_peers =
-      Enum.reject(torrent.connected_peers, &(&1.ip === address.ip && &1.port === address.port))
-
     {:reply, :ok,
-     %Torrent{
-       torrent
-       | peers: peers_with_returned,
-         connected_peers: connected_peers
-     }
+     %Torrent{torrent | peers: peers_with_returned}
      |> broadcast_state()}
   end
 
@@ -141,17 +146,31 @@ defmodule Bittorrent.Client do
     {:reply, getter_fn.(torrent), torrent}
   end
 
+  @impl true
+  def handle_call(
+        {:update_peer_downloader, state_or_update_fn, pid_override},
+        {from_pid, _},
+        torrent
+      ) do
+    peer_downloader_pid = pid_override || from_pid
+
+    peer_downloaders =
+      if is_function(state_or_update_fn) do
+        old_value = Map.get(torrent.peer_downloaders, peer_downloader_pid)
+        Map.put(torrent.peer_downloaders, peer_downloader_pid, state_or_update_fn.(old_value))
+      else
+        Map.put(torrent.peer_downloaders, peer_downloader_pid, state_or_update_fn)
+      end
+
+    {:reply, :ok, %Torrent{torrent | peer_downloaders: peer_downloaders}}
+  end
+
   # Utilities
 
   defp handle_request_peer(torrent) do
     case :queue.out(torrent.peers) do
       {{_value, assigned_peer}, remaining_peers} ->
-        {assigned_peer,
-         %Torrent{
-           torrent
-           | peers: remaining_peers,
-             connected_peers: [assigned_peer | torrent.connected_peers]
-         }}
+        {assigned_peer, %Torrent{torrent | peers: remaining_peers}}
 
       {:empty, _} ->
         {nil, torrent}

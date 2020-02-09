@@ -8,9 +8,7 @@ defmodule Bittorrent.PeerDownloader do
   alias Bittorrent.{Client, Peer.Connection}
 
   defmodule State do
-    defstruct address: nil,
-              peer: nil,
-              socket: nil
+    defstruct(address: nil, peer: nil, socket: nil)
   end
 
   @type peer() :: %Connection.State{} | nil
@@ -49,22 +47,28 @@ defmodule Bittorrent.PeerDownloader do
     Logger.debug("PeerDownloader: connected")
     Logger.metadata(peer: Base.encode64(peer.id))
 
-    state = %State{
-      state
-      | peer: peer,
-        socket: socket
-    }
+    Client.update_peer_downloader(state)
 
-    {:noreply, request_piece(state)}
+    state =
+      %State{
+        state
+        | peer: peer,
+          socket: socket
+      }
+      |> request_piece()
+
+    {:noreply, state}
   end
 
   @impl true
   def handle_info({_task, {:downloaded, piece, peer}}, state) do
     Logger.debug("PeerDownloader: piece complete, fetching next piece")
     Client.piece_downloaded(state.peer.piece, piece)
-    state = %State{state | peer: peer}
+    state = %State{state | peer: peer} |> request_piece()
 
-    {:noreply, request_piece(state)}
+    Client.update_peer_downloader(state)
+
+    {:noreply, state}
   end
 
   @impl true
@@ -72,20 +76,29 @@ defmodule Bittorrent.PeerDownloader do
     Logger.debug("PeerDownloader: new connection because error #{reason}")
 
     Client.return_peer(state.address)
+    state = start_handshake_with_new_peer(state)
 
-    {:noreply, start_handshake_with_new_peer(state)}
+    Client.update_peer_downloader(state)
+
+    {:noreply, state}
   end
 
   @impl true
   def handle_info({_task, :retry_connect}, %State{address: nil} = state) do
     state = %State{state | address: request_peer()}
     start_handshake_task_or_sleep(state)
+
+    Client.update_peer_downloader(state)
+
     {:noreply, state}
   end
 
   @impl true
   def handle_info({_task, :retry_connect}, state) do
     start_handshake_task_or_sleep(state)
+
+    Client.update_peer_downloader(state)
+
     {:noreply, state}
   end
 
@@ -109,7 +122,7 @@ defmodule Bittorrent.PeerDownloader do
     pid = self()
 
     Task.async(fn ->
-      %{info_sha: info_sha, peer_id: peer_id} = Bittorrent.Client.get()
+      %{info_sha: info_sha, peer_id: peer_id} = Client.get()
 
       case Connection.connect(
              state.address,
@@ -129,11 +142,13 @@ defmodule Bittorrent.PeerDownloader do
   end
 
   defp start_download_piece_task(state) do
+    pid = self()
+
     Task.async(fn ->
       Logger.metadata(peer: Base.encode64(state.peer.id))
       Logger.debug("Peer: downloading piece #{state.peer.piece.number}")
 
-      case Connection.main_loop(state.peer, state.socket) do
+      case Connection.main_loop(state.peer, state.socket, pid) do
         {:error, reason} ->
           {:error, state.address, reason}
 
